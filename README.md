@@ -13,7 +13,7 @@ An original, configuration-driven CLIProxyAPI provider extension for Pi.
 - Last-known raw catalogue cache outside the installed package, scoped to configuration identity, re-derived through the current metadata resolver. Failed refresh preserves the previous in-memory snapshot.
 - Strict, versioned YAML configuration; environment/file/Keychain **credential references**, never literal keys in config.
 - Public local configuration and private bundled configuration + persistent local overrides.
-- `/cpa-setup` connection wizard and advanced validated YAML editor. Setup saves only local configuration, does not change CPA or Pi defaults, and requires UI.
+- `/cpa-setup` connection wizard with explicit native protocol selection, advanced validated YAML editor and optional read-only client discovery check before saving. Setup writes only local configuration, never CPA or Pi defaults, and requires UI.
 - `/cpa-status`, `/cpa-refresh-models` and optional `/cpa-admin` for Manager Plus price status, preview, approved apply and latest-transaction rollback.
 - `/cpa-server-profiles` for separately configured OAuth alias/context publication, ownership checks and latest rollback; single-alias behavior verified against an isolated native CLIProxyAPI v8.0.13 release. `compatibleGroups` adds alias/context rows on existing OAuth channels, not provider priorities or failover-order configuration.
 - Private distribution assembler, without a second copy of the source implementation.
@@ -42,6 +42,8 @@ Default user file: `~/.pi/agent/pi-cpa-proxy/config.yaml` (under `PI_CODING_AGEN
 Set `CPA_PROXY_CONFIG` to an absolute path or `~/...` to select a different file. No project configuration is loaded automatically.
 
 Run `/cpa-setup` or copy and edit `config.example.yaml`. The example uses synthetic model IDs; it is a schema demonstration, not a working model list.
+
+The wizard asks which native completion protocol to use; discovery cannot infer it. Both setup modes offer an optional connection check before final save: only the external client credential and GET `/v1/models` are used, never admin endpoints, completions or cache writes. Counts show listed/usable/omitted models and missing profiles. Unknown models need explicit metadata overrides; listing alone does not certify completions. You can skip the check or deliberately save an offline/unverified config. See [setup checks and evidence limits](docs/setup-verification.md).
 
 Network responsibilities are separate: **Pi → CPA** uses the selected native protocol; **CPA → upstream** owns Google/OpenAI/etc. authentication, translation, quotas and routing. Native Google operation is tested and does not require custom fetch. The custom fetch used for supported SDKs is extra client error/redirect hygiene, not a Google replacement or upstream router.
 
@@ -199,7 +201,7 @@ npm pack --dry-run
 
 Pi supplies host peers when loading managed packages. For local development, make installed host packages available via local links or dev tooling; never bundle them in the published package.
 
-The current suite has **130 passing tests** locally, including administrative conflict detection, lost acknowledgments, journal failures, rollback recovery and cancellation. These tests do not establish compatibility with an arbitrary deployed Manager version.
+The current suite has **152 passing tests** locally, including administrative conflict detection, lost acknowledgments, journal failures, rollback recovery and cancellation. These tests do not establish compatibility with an arbitrary deployed Manager version.
 
 Pi/update probes use isolated homes, synthetic credentials and a mock gateway; they never call a production model or alter global Pi settings. The optional server-profile probe downloads a checksum-verified native CLIProxyAPI v8.0.13 Darwin arm64 binary and exercises its HTTP API locally with synthetic OAuth auth, no completions. Other platforms may supply a binary explicitly; this is labeled separately, not automatically certified. They retain concise JSON evidence under `.artifacts/` (gitignored). The update probe exercises Git package updates through local repositories; it does **not** authenticate to a real private GitHub repository.
 

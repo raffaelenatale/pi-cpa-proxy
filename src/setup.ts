@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { stringify } from 'yaml';
 import type { ExtensionCommandContext } from '@earendil-works/pi-coding-agent';
 import { decodeYaml, overlay, readLayers, saveLocalLayer, validateConfiguration, ProxyFault } from './configuration.ts';
-import { secretSpec } from './schema.ts';
+import { secretSpec, wireApis, type WireApi } from './schema.ts';
+import { checkSetupConnection, setupCheckSummary } from './setup-check.ts';
 
 export async function runSetup(ctx: ExtensionCommandContext, bundledPath: string, localPath: string): Promise<boolean> {
   if (!ctx.hasUI) throw new ProxyFault('setup_requires_ui_use_yaml');
@@ -14,6 +15,7 @@ export async function runSetup(ctx: ExtensionCommandContext, bundledPath: string
   const mode = await ctx.ui.select('CPA setup: credentials remain external', ['Connection wizard', 'Advanced YAML override editor']);
   if (!mode) return false;
   let local = layers.local;
+  let editedId: string | undefined;
   if (mode === 'Advanced YAML override editor') {
     const entered = await ctx.ui.editor('Local config / private overrides (null removes keys; lists replace)', stringify(Object.keys(local).length ? local : { schemaVersion: 1, connections: {} }));
     if (entered === undefined) return false;
@@ -21,9 +23,15 @@ export async function runSetup(ctx: ExtensionCommandContext, bundledPath: string
   } else {
     const id = await ctx.ui.input('Provider ID (use existing ID to edit)', Object.keys(layers.config?.connections ?? {})[0] ?? 'cpa-proxy');
     if (!id) return false;
+    editedId = id;
     const previous = layers.config?.connections[id];
     const endpoint = await ctx.ui.input('CPA origin, no /v1 suffix', previous?.endpoint ?? 'http://127.0.0.1:8317');
     if (!endpoint) return false;
+    const previousApi = previous?.api ?? 'openai-completions';
+    const api = await ctx.ui.select('Native completion protocol (discovery cannot infer this)',
+      [previousApi, ...wireApis.filter((candidate) => candidate !== previousApi)]);
+    if (!api) return false;
+    if (!wireApis.includes(api as WireApi)) throw new ProxyFault('setup_protocol_invalid');
     const method = await ctx.ui.select('Credential reference — do not paste a key', ['Environment variable', 'Protected file', 'macOS Keychain']);
     if (!method) return false;
     let reference: unknown;
@@ -36,9 +44,9 @@ export async function runSetup(ctx: ExtensionCommandContext, bundledPath: string
       if (!path) return false;
       reference = { kind: 'file', path };
     } else {
-      const service = await ctx.ui.input('Keychain service');
+      const service = await ctx.ui.input('Keychain service', previous?.credential.kind === 'keychain' ? previous.credential.service : undefined);
       if (!service) return false;
-      const account = await ctx.ui.input('Keychain account');
+      const account = await ctx.ui.input('Keychain account', previous?.credential.kind === 'keychain' ? previous.credential.account : undefined);
       if (!account) return false;
       reference = { kind: 'keychain', service, account };
     }
@@ -46,9 +54,21 @@ export async function runSetup(ctx: ExtensionCommandContext, bundledPath: string
     if (!checked.success) throw new ProxyFault('credential_reference_invalid');
     const insecure = endpoint.startsWith('http:') ? await ctx.ui.confirm('HTTP endpoint', 'Allow unencrypted HTTP for this explicit local/tunnel endpoint?') : false;
     if (endpoint.startsWith('http:') && !insecure) return false;
-    local = overlay(local, { schemaVersion: 1, connections: { [id]: { endpoint, credential: checked.data, allowInsecureHttp: insecure } } });
+    local = overlay(local, { schemaVersion: 1, connections: { [id]: { endpoint, api, credential: checked.data, allowInsecureHttp: insecure } } });
   }
   const effective = validateConfiguration(overlay(layers.bundled, local));
+  const checkMode = await ctx.ui.select('Optional client discovery check (no server writes)', ['Save without connection check', 'Check connection before saving']);
+  if (!checkMode) return false;
+  if (checkMode === 'Check connection before saving') {
+    const ids = Object.keys(effective.connections);
+    if (!ids.length) { ctx.ui.notify('No configured connection to check.', 'info'); return false; }
+    const target = editedId ?? (ids.length === 1 ? ids[0] : await ctx.ui.select('Connection to check', ids));
+    if (!target) return false;
+    const connection = effective.connections[target];
+    if (!connection) throw new ProxyFault('setup_check_selection_invalid');
+    const result = await checkSetupConnection(target, connection, AbortSignal.timeout(connection.timeoutMs + 6000));
+    ctx.ui.notify(setupCheckSummary(result), result.ok ? 'info' : 'warning');
+  }
   if (!await ctx.ui.confirm('Save CPA configuration?', `${Object.keys(effective.connections).length} connection(s). Writes only local configuration; does not change CPA server or Pi defaults. Active provider changes require reload.`)) return false;
   await saveLocalLayer(localPath, local, layers.bundled, expected);
   return true;

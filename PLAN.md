@@ -40,7 +40,8 @@ The private artifact is installed instead of the public/legacy engine, not along
 - [ ] Certify Manager Plus adapter against an isolated real version/image; keep full-table/no-CAS limitation explicit. `test:manager` is a synthetic loopback probe only, not completion of this gate.
 - [x] Decide scoped quota/key/alias/cooldown capabilities and document alpha exclusions in `docs/admin-scope.md`: alias/context supported, secret-bearing usage/listing and non-reversible cooldown actions excluded.
 - [ ] Richer provenance/diagnostics, optional external catalogue enrichment, schema migration and machine-preset selection.
-- [ ] Complete setup connection checks/discovery guidance and manual TUI usability checks.
+- [x] Setup explicit protocol selection and optional read-only connection/discovery checks with redacted guidance, no management/cache/completion requests; synthetic UI/HTTP coverage in `docs/setup-verification.md`.
+- [ ] Manual TUI setup usability checks and real Keychain verification; synthetic UI tests do not complete these gates.
 - [ ] Additional stream signatures/interleaved tools/retries/long streams, input-limit and session replay/reload coverage; real Keychain checks.
 - [ ] Interrupted installation, process/disk failures and multiple-package partial-update recovery; real private Git authentication and registry install/update checks.
 - [ ] Supported platform/version matrix based on actual CI/probes, not assumed compatibility.
