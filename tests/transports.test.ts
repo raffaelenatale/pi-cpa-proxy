@@ -170,4 +170,20 @@ for (const api of apis) {
       const message = await pending; assert.equal(message.stopReason, 'aborted');
     } finally { await f.close(); }
   });
+  test(`${api}: stream accumulates tokens and completes reliably`, async () => {
+    const f = await fixture(api);
+    try {
+      const stream = await f.registry.streamSimple(f.model, { messages: [user] }, { maxRetries: 0 });
+      const events: any[] = [];
+      for await (const event of stream) {
+        events.push(event);
+      }
+      const message = await stream.result();
+      assert.equal(message.stopReason, 'stop', message.errorMessage);
+      const textBlock = message.content.find((b) => b.type === 'text');
+      assert.ok(textBlock && textBlock.type === 'text');
+      assert.equal(textBlock.text, 'OK');
+      assert.ok(events.length >= 1, 'Stream events must be produced');
+    } finally { await f.close(); }
+  });
 }
