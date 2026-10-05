@@ -29,7 +29,7 @@ The private artifact is installed instead of the public/legacy engine, not along
 - [x] Move development checkout into the owner's personal code workspace.
 - [x] Audit initial source content and tarball for secrets/private topology; run local gates.
 - [x] Create public `raffaelenatale/pi-cpa-proxy`.
-- [ ] Initial commit and push.
+- [x] Initial commit and push on `main` (`89aeb15`, development alpha).
 - [ ] Observe Linux/macOS Node 22/24 CI and fix confirmed failures; do not claim remote checks before results.
 
 ## Remaining implementation and certification
