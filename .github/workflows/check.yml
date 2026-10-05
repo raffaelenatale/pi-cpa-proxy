@@ -18,8 +18,6 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci --ignore-scripts --legacy-peer-deps
-      - name: Install development host (not included in artifacts)
-        run: npm install --no-save --package-lock=false --ignore-scripts --legacy-peer-deps @earendil-works/pi-coding-agent@1.0.2 @earendil-works/pi-ai@1.0.2
       - name: Use the pinned local Pi CLI for integration probes
         run: echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
       - run: npm run check
