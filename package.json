@@ -1,0 +1,23 @@
+{
+  "name": "pi-cpa-proxy",
+  "version": "0.1.0-alpha.1",
+  "description": "Configurable CLIProxyAPI provider for Pi with discovery, role profiles and safe setup",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi-extension", "cliproxyapi", "provider"],
+  "repository": { "type": "git", "url": "git+https://github.com/raffaelenatale/pi-cpa-proxy.git" },
+  "engines": { "node": ">=22.19.0" },
+  "pi": { "extensions": ["./src/entry.ts"] },
+  "files": ["src", "config.example.yaml", "README.md", "LICENSE"],
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:pi": "node --experimental-strip-types scripts/probe-pi.ts",
+    "test:update": "node --experimental-strip-types scripts/probe-update.ts",
+    "test:server-profiles": "node --experimental-strip-types scripts/probe-server-profiles.ts",
+    "bundle:private": "node --experimental-strip-types scripts/assemble-private.ts"
+  },
+  "dependencies": { "yaml": "^2.8.1", "zod": "^4.1.5" },
+  "peerDependencies": { "@earendil-works/pi-ai": "*", "@earendil-works/pi-coding-agent": "*" },
+  "devDependencies": { "@types/node": "^22.19.0", "typescript": "^5.9.3" }
+}

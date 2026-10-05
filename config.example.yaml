@@ -1,0 +1,35 @@
+# Public, synthetic example. Secrets are references, never embedded values.
+schemaVersion: 1
+connections:
+  cpa-proxy:
+    endpoint: http://127.0.0.1:8317
+    allowInsecureHttp: true # Explicit local/tunnel HTTP consent.
+    credential:
+      kind: env
+      name: CPA_PROXY_API_KEY
+    api: openai-completions
+    builtinCatalog: true
+    # Unknown/ambiguous models are omitted until given complete metadata.
+    models:
+      example-primary:
+        contextWindow: 200000
+        maxTokens: 32000
+        input: [text]
+        reasoning: true
+        thinkingLevelMap: { low: low, medium: null, high: high, max: max }
+        compat: { supportsDeveloperRole: false, supportsStore: false }
+        cost: { input: 1, output: 4, cacheRead: 0.1, cacheWrite: 0 }
+      example-backup:
+        contextWindow: 200000
+        maxTokens: 64000
+        input: [text, image]
+        reasoning: true
+        cost: { input: 2, output: 8, cacheRead: 0.2, cacheWrite: 0 }
+    profiles:
+      example-role:
+        # Must already be exposed by CPA. This does not configure failover.
+        members: [example-primary, example-backup]
+        effort: inherit
+        metadata:
+          api: openai-completions
+          compat: { supportsDeveloperRole: false, supportsStore: false }

@@ -1,0 +1,29 @@
+name: checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['22', '24']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts --legacy-peer-deps
+      - name: Install development host (not included in artifacts)
+        run: npm install --no-save --package-lock=false --ignore-scripts --legacy-peer-deps @earendil-works/pi-coding-agent@1.0.2 @earendil-works/pi-ai@1.0.2
+      - name: Use the pinned local Pi CLI for integration probes
+        run: echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:pi
+      - run: npm run test:update
+      - run: npm pack --dry-run
