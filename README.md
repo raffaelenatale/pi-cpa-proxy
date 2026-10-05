@@ -15,12 +15,12 @@ An original, configuration-driven CLIProxyAPI provider extension for Pi.
 - Public local configuration and private bundled configuration + persistent local overrides.
 - `/cpa-setup` connection wizard and advanced validated YAML editor. Setup saves only local configuration, does not change CPA or Pi defaults, and requires UI.
 - `/cpa-status`, `/cpa-refresh-models` and optional `/cpa-admin` for Manager Plus price status, preview, approved apply and latest-transaction rollback.
-- `/cpa-server-profiles` for separately configured OAuth alias/context publication, ownership checks and latest rollback; verified against an isolated native CLIProxyAPI v8.0.13 release.
+- `/cpa-server-profiles` for separately configured OAuth alias/context publication, ownership checks and latest rollback; single-alias behavior verified against an isolated native CLIProxyAPI v8.0.13 release. `compatibleGroups` adds alias/context rows on existing OAuth channels, not provider priorities or failover-order configuration.
 - Private distribution assembler, without a second copy of the source implementation.
 
 ## Not implemented yet
 
-CPA compatible-provider primary/fallback routing administration, server fixed-effort/payload changes, key/cooldown actions, quota widgets, models.dev fetching, full schema/editor diagnostics, schema migrations, machine-preset selection and live installation migration. Manager Plus prices are implemented against a recorded HTTP contract and tested on a synthetic server, not yet certified against your installed Manager version. Setup tests against UI mocks do not replace a manual TUI usability check. No production server changes are performed by this alpha.
+Actual compatible API-key provider-group routing administration, models.dev fetching, full schema/editor diagnostics, schema migrations, machine-preset selection and live installation migration remain unimplemented. Server fixed-effort/payload changes, key/credential operations, cooldown reset and quota widgets are deliberately excluded from the alpha; see [administrative scope and reasons](docs/admin-scope.md). Some upstream read endpoints return credentials, and cooldown reset lacks the required rollback contract. Manager Plus prices have a recorded-source contract and synthetic loopback probe (`npm run test:manager`), not real-image certification. Setup tests against UI mocks do not replace a manual TUI usability check. No production server changes have been performed during development.
 
 ## Installation (development)
 

@@ -258,6 +258,29 @@ test('fixed HTTP allowlist rejects full config reads and arbitrary writes', asyn
   await assert.rejects(() => profileHttp('https://example.invalid', '/v8/management/config/api-keys', 'synthetic', 1000, signal()), /admin_path_forbidden/);
   await assert.rejects(() => profileHttp('https://example.invalid', '/v8/management/config', 'synthetic', 1000, signal(), { 'api-keys': [] }), /admin_patch_scope_forbidden/);
 });
+test('excluded credential, usage, quota and cooldown endpoints fail before any network request', async () => {
+  const f = await fixture();
+  try {
+    const paths = ['/v8/management/credentials', '/v8/management/credentials/download',
+      '/v8/management/credentials/status', '/v8/management/credentials/fields', '/v8/management/credentials/refresh',
+      '/v8/management/observability/usage/api-keys', '/v8/management/routing/cooldown/reset',
+      '/v8/management/config/access/api-keys', '/v8/management/config/api-keys',
+      '/v8/management/requests/api-call', '/v8/management/plugins/example/quota', '/v8/management/oauth/auth-url'];
+    for (const path of paths) {
+      for (const body of [undefined, { auth_index: 'synthetic-index' }]) {
+        await assert.rejects(() => profileHttp(f.config.endpoint, path, 'ADMIN_SYNTHETIC', 1000, signal(), body), /admin_path_forbidden/);
+      }
+    }
+    assert.deepEqual(f.paths, []);
+    assert.equal(f.patches(), 0);
+  } finally { await f.close(); }
+});
+test('strict server config rejects excluded quota/key/cooldown consent flags', () => {
+  const base = { kind: 'cli-proxy-api-v8', endpoint: 'https://example.invalid', credential: { kind: 'env', name: 'KEY' } };
+  for (const field of ['allowCooldownReset', 'allowKeyWrites', 'quotaPolling']) {
+    assert.throws(() => serverAdminSpec.parse({ ...base, [field]: true }));
+  }
+});
 test('compatible primary/fallback group publishing, catalogue verification and atomic rollback', async () => {
   const f = await fixture();
   try {

@@ -22,7 +22,7 @@ The private artifact is installed instead of the public/legacy engine, not along
 - [x] Safe stream diagnostic boundary; supported OpenAI/Anthropic fetch hardening with redirect refusal and bounded SSE validation. Google keeps its native path; this is extra client hygiene, not an upstream router or functional requirement.
 - [x] Actual Pi packed-package loading and public/private Git updates with external config/default preservation.
 - [x] Tag/commit pins, unavailable remote, invalid-manifest installation failure and runtime-defect rollback tested with isolated real Pi commands.
-- [x] Local TypeScript check and 130 tests on macOS/Node 26/Pi 1.0.2.
+- [x] Local TypeScript check and 136 tests on macOS/Node 26/Pi 1.0.2 (commit `c91fe4b`; later verification tracked in development status).
 
 ## Repository delivery
 
@@ -34,10 +34,11 @@ The private artifact is installed instead of the public/legacy engine, not along
 
 ## Remaining implementation and certification
 
-- [ ] Complete the inventory of legacy operational logic and versioned feature research; record adopted/deferred/excluded behavior.
-- [x] Secure, separately enabled server-side connector for compatible-provider primary/fallback groups, priorities and ownership. Never persist upstream keys in client journals or invent API endpoints.
-- [x] Certify Manager Plus adapter against an isolated real version/image; keep full-table/no-CAS limitation explicit.
-- [ ] Decide and implement scoped quota/key/alias/cooldown capabilities or explicitly document supported exclusions.
+- Inventory of legacy operational logic skipped at the owner's request; versioned feature research remains incomplete and is not a certification claim.
+- [x] Separately enabled alias/context mapping for `compatibleGroups` on existing OAuth channels, with ownership and no upstream-key download. Primary/fallback labels do not configure routing order.
+- [ ] Secure connector for actual compatible API-key provider groups and priorities, if required for release; current OAuth mappings do not implement or certify this capability.
+- [ ] Certify Manager Plus adapter against an isolated real version/image; keep full-table/no-CAS limitation explicit. `test:manager` is a synthetic loopback probe only, not completion of this gate.
+- [x] Decide scoped quota/key/alias/cooldown capabilities and document alpha exclusions in `docs/admin-scope.md`: alias/context supported, secret-bearing usage/listing and non-reversible cooldown actions excluded.
 - [ ] Richer provenance/diagnostics, optional external catalogue enrichment, schema migration and machine-preset selection.
 - [ ] Complete setup connection checks/discovery guidance and manual TUI usability checks.
 - [ ] Additional stream signatures/interleaved tools/retries/long streams, input-limit and session replay/reload coverage; real Keychain checks.

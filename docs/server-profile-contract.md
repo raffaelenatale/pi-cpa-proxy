@@ -27,7 +27,7 @@ The adapter sends alias and context changes together rather than issuing two sep
 ## Supported behavior
 
 - Generic OAuth channel alias with `fork: true` to retain the original model, and explicit alias-specific context metadata.
-- Compatible-provider primary/fallback groups: mapped via scoped primary/fallback rows on existing channels with `fork: true` without client transmission or persistence of upstream credentials.
+- `compatibleGroups`: mapped via alias/context rows on existing OAuth channels with `fork: true`, without client transmission or persistence of upstream credentials. `primary`/`fallback` are desired-spec/display labels, not a server priority setting; the adapter does not configure actual compatible API-key provider groups or certify failover order.
 - Explicit server configuration block, separate from Pi `profiles` metadata and Manager prices.
 - Only channels already present in both alias/settings maps. Missing map/channel initialization is an explicit operator task; the adapter refuses rather than creating keys it cannot exactly undo.
 - Source must be present in the client catalogue and not another known OAuth alias. A catalogue alone does not prove provider/channel membership or completion capability. No fuzzy owner inference or alias-chain support.
@@ -43,7 +43,7 @@ The adapter sends alias and context changes together rather than issuing two sep
 
 ## Deliberate exclusions
 
-Upstream API keys and raw provider credential sections (`api-keys.openai-compatibility[].api-key`) live exclusively on the server and are never downloaded, modified or persisted into client journals. The compatible group adapter operates strictly on channel model mappings and context boundaries, preserving server-side routing, affinities and cooldowns without handling upstream tokens.
+Upstream API keys and raw provider credential sections (`api-keys.openai-compatibility[].api-key`) live exclusively on the server and are never downloaded, modified or persisted into client journals. The `compatibleGroups` mapping operates strictly on OAuth channel aliases and context boundaries, leaving server-side priorities, affinities and cooldowns unchanged. See [administrative scope](admin-scope.md) for key/credential/usage/quota/cooldown exclusions and their contract evidence.
 
 Fixed server effort/payload rules (`requests.payload`) and dynamic server priorities remain managed directly by the server configuration, outside client runtime metadata.
 

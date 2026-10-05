@@ -130,16 +130,18 @@ try {
 
   const evidence = await recordEvidence(root, 'manager-probe', {
     status: 'passed',
+    validationKind: 'synthetic-loopback',
+    realManagerCertification: false,
     sandbox,
     checks: [
-      'GET /v0/management/model-prices validates structure strictly',
-      'Read-only preview calculates exact delta and hashes',
-      'Exclusive-writer consent verified before PUT',
-      'Full-table PUT replaces only managed entries, retaining existing metadata and rules',
-      'Server-side updated timestamps handled gracefully by canonical comparison',
-      'Transaction journal records states atomically',
-      'Atomic rollback restores exact previous table snapshot',
-      'Zero admin credentials echoed or leaked',
+      'GET status reports synthetic price table and CAS unavailable',
+      'Preview reports managed-model delta without PUT',
+      'Approved apply sends one full-table PUT',
+      'Unrelated source/rawJson metadata retained',
+      'Synthetic updated timestamps tolerated by verification',
+      'Status reports applied and rolled-back transaction states',
+      'Latest rollback removes introduced row and restores original rates',
+      'PUT bodies do not contain the synthetic admin key',
     ],
     getCount,
     putCount,
@@ -147,7 +149,7 @@ try {
 
   console.log(`MANAGER_PROBE OK evidence=${evidence}`);
 } catch (error) {
-  const evidence = await recordEvidence(root, 'manager-probe', { status: 'failed', sandbox, error: String(error) });
+  const evidence = await recordEvidence(root, 'manager-probe', { status: 'failed', validationKind: 'synthetic-loopback', realManagerCertification: false, sandbox, error: String(error) });
   console.error(`MANAGER_PROBE ERROR origin=scripts/probe-manager.ts recovery=inspect_synthetic_evidence diagnostic=${evidence}`);
   process.exitCode = 1;
 } finally {

@@ -53,7 +53,7 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
     },
   });
   pi.registerCommand('cpa-server-profiles', {
-    description: 'Opt-in CPA OAuth alias publication and rollback (no compatible primary/fallback)',
+    description: 'Opt-in CPA OAuth alias/context mapping and rollback (server routing unchanged)',
     handler: async (_args, ctx) => {
       try {
         const current = await readLayers(bundledPath, localPath);
