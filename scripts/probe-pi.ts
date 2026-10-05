@@ -11,15 +11,44 @@ import { command, isolatedEnvironment, recordEvidence } from './process.ts';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const sandbox = await mkdtemp(join(tmpdir(), 'pi-cpa-probe-'));
 let adminRequests = 0;
-const server = createServer((req, res) => {
+const completionPayloads: Record<string, any>[] = [];
+const fixturePath = join(sandbox, 'fixture.txt');
+const fixtureText = 'SYNTHETIC_TOOL_READ_OK';
+const server = createServer(async (req, res) => {
   if (req.url?.startsWith('/v0/management') || req.url?.startsWith('/v8/management')) { adminRequests++; res.writeHead(500); res.end(); return; }
   assert.equal(req.headers.authorization, 'Bearer SYNTHETIC_PROBE');
-  res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ data: [{ id: 'sample-alias' }] }));
+  if (req.url === '/v1/models') {
+    assert.equal(req.method, 'GET');
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ data: [{ id: 'sample-alias' }] })); return;
+  }
+  assert.equal(req.url, '/v1/chat/completions'); assert.equal(req.method, 'POST');
+  let raw = ''; for await (const chunk of req) raw += chunk;
+  const payload = JSON.parse(raw); completionPayloads.push(payload);
+  const needsTool = completionPayloads.length === 1;
+  if (needsTool) assert.ok(payload.tools.some((tool: { function: { name: string } }) => tool.function.name === 'read'));
+  else assert.match(JSON.stringify(payload.messages), /SYNTHETIC_TOOL_READ_OK/);
+  res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+  const emit = (delta: unknown, finish_reason: string | null) => res.write(`data: ${JSON.stringify({
+    id: 'synthetic-agent', object: 'chat.completion.chunk', created: 1, model: payload.model,
+    choices: [{ index: 0, delta, finish_reason }],
+    ...(finish_reason ? { usage: { prompt_tokens: 20, completion_tokens: 2, total_tokens: 22 } } : {}),
+  })}\n\n`);
+  if (needsTool) {
+    emit({ role: 'assistant', tool_calls: [{ index: 0, id: 'call_probe_read', type: 'function',
+      function: { name: 'read', arguments: JSON.stringify({ path: fixturePath }) } }] }, null);
+    emit({}, 'tool_calls');
+  } else {
+    emit({ role: 'assistant', content: 'SYNTHETIC_' }, null);
+    emit({ content: completionPayloads.length === 2 ? 'AGENT_OK' : 'RESUME_OK' }, null);
+    emit({}, 'stop');
+  }
+  res.end('data: [DONE]\n\n');
 });
 server.listen(0, '127.0.0.1'); await once(server, 'listening');
 const endpoint = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 try {
+  await writeFile(fixturePath, fixtureText + '\n');
   const env = isolatedEnvironment(join(sandbox, 'home'), { CPA_TEST_KEY: 'SYNTHETIC_PROBE' });
   const directory = join(env.PI_CODING_AGENT_DIR!, 'pi-cpa-proxy');
   await mkdir(directory, { recursive: true });
@@ -48,8 +77,39 @@ try {
   const emptyEnv = isolatedEnvironment(join(sandbox, 'empty-home'));
   const noConfig = await command('pi', [...args.slice(0, -2), '--list-models', 'synthetic-cpa'], { cwd: sandbox, env: emptyEnv });
   assert.doesNotMatch(noConfig, /sample-alias/);
+  const sessions = join(sandbox, 'sessions');
+  const agentArgs = [...args.slice(0, -2), '--mode', 'json', '--provider', 'synthetic-cpa', '--model', 'sample-alias',
+    '--thinking', 'off', '--tools', 'read', '--session-dir', sessions, '--session-id', 'adapter-probe'];
+  const parseEvents = (text: string): Record<string, any>[] => text.trim().split('\n').map((line) => JSON.parse(line));
+  const agentOutput = await command('pi', [...agentArgs, 'Read the synthetic fixture using the read tool.'], { cwd: sandbox, env });
+  const events = parseEvents(agentOutput);
+  const toolEnd = events.find((event) => event.type === 'tool_execution_end');
+  assert.equal(toolEnd?.toolName, 'read'); assert.equal(toolEnd?.isError, false);
+  assert.match(JSON.stringify(toolEnd?.result), /SYNTHETIC_TOOL_READ_OK/);
+  assert.ok(events.some((event) => event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta'));
+  const lastAssistant = events.filter((event) => event.type === 'message_end' && event.message?.role === 'assistant').at(-1)?.message;
+  assert.equal(lastAssistant?.stopReason, 'stop');
+  assert.equal(lastAssistant?.content.find((block: { type: string }) => block.type === 'text')?.text, 'SYNTHETIC_AGENT_OK');
+  assert.equal(completionPayloads.length, 2);
+  const resumeArgs = [...args.slice(0, -2), '--mode', 'json', '--provider', 'synthetic-cpa', '--model', 'sample-alias',
+    '--thinking', 'off', '--tools', 'read', '--session-dir', sessions, '--session', 'adapter-probe'];
+  const resumedOutput = await command('pi', [...resumeArgs, 'Continue the synthetic conversation.'], { cwd: sandbox, env });
+  const resumed = parseEvents(resumedOutput);
+  const resumedAssistant = resumed.filter((event) => event.type === 'message_end' && event.message?.role === 'assistant').at(-1)?.message;
+  assert.equal(resumedAssistant?.stopReason, 'stop');
+  assert.equal(resumedAssistant?.content.find((block: { type: string }) => block.type === 'text')?.text, 'SYNTHETIC_RESUME_OK');
+  assert.equal(completionPayloads.length, 3);
+  assert.match(JSON.stringify(completionPayloads[2].messages), /SYNTHETIC_AGENT_OK/);
+  assert.doesNotMatch(agentOutput + resumedOutput, /SYNTHETIC_PROBE/);
+  assert.equal(await readFile(path, 'utf8'), config);
   assert.equal(adminRequests, 0);
-  const evidence = await recordEvidence(root, 'pi-probe', { status: 'passed', sandbox, checks: ['public tarball allowlist', 'CLI loads packed native provider', '1M alias metadata', 'offline raw cache', 'config unchanged', 'missing config nonblocking', 'configured admin not contacted at startup'], inventory, output });
+  const evidence = await recordEvidence(root, 'pi-probe', { status: 'passed', sandbox,
+    validationKind: 'real-pi-synthetic-gateway', productionGatewayCertification: false,
+    checks: ['public tarball allowlist', 'CLI loads packed native provider', '1M alias metadata', 'offline raw cache',
+      'config unchanged', 'missing config nonblocking', 'configured admin never contacted',
+      'real Pi read tool executed against synthetic fixture', 'tool result returned in native completion request',
+      'CLI emits text stream deltas and final assistant text', 'persisted session resumes with prior tool/text history'],
+    completionRequests: completionPayloads.length, inventory, output });
   console.log(`PI_PROBE OK evidence=${evidence}`);
 } catch (error) {
   const evidence = await recordEvidence(root, 'pi-probe', { status: 'failed', sandbox, error: String(error) });

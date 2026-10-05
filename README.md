@@ -4,6 +4,10 @@ An original, configuration-driven CLIProxyAPI provider extension for Pi.
 
 **Development alpha — npm release pending.** Implementation and release gates are tracked in [PLAN.md](PLAN.md); public development source is separate from a completed release. Current verified host: Pi 1.0.2 on macOS / Node 26. Linux and additional Pi versions require their own test runs before support is declared. This is not an upstream CLIProxyAPI project or a fork of another extension.
 
+## Essential scope
+
+This is a local **Pi → CPA adapter**, not a CPA administration suite. Configure an origin and external client credential, discover exposed models, supply accurate Pi metadata and use native streaming. CPA remains responsible for upstream accounts, priorities/fallback, quotas and cooldowns. Setup/status/cache are conveniences; implemented administration is optional and never runs during startup, setup, refresh or updates. Optional admin certification and speculative feature expansion do not block completion of the adapter core.
+
 ## Implemented
 
 - Native Pi provider registration, with built-in streaming implementations for Chat Completions, Responses, Anthropic Messages and Google Generative AI. All four have synthetic HTTP end-to-end coverage for stream/tool-result round-trip, image payload serialization, errors, truncation and cancellation; this is not live-backend certification.
@@ -20,7 +24,7 @@ An original, configuration-driven CLIProxyAPI provider extension for Pi.
 
 ## Not implemented yet
 
-Actual compatible API-key provider-group routing administration, models.dev fetching, full schema/editor diagnostics, schema migrations, machine-preset selection and live installation migration remain unimplemented. Server fixed-effort/payload changes, key/credential operations, cooldown reset and quota widgets are deliberately excluded from the alpha; see [administrative scope and reasons](docs/admin-scope.md). Some upstream read endpoints return credentials, and cooldown reset lacks the required rollback contract. Manager Plus prices have a recorded-source contract and synthetic loopback probe (`npm run test:manager`), not real-image certification. Setup tests against UI mocks do not replace a manual TUI usability check. No production server changes have been performed during development.
+Actual compatible API-key provider-group routing administration, models.dev fetching, richer diagnostics, schema migrations and machine-preset selection are outside the current essential delivery. Live installation migration is a separate explicitly approved operation. Server fixed-effort/payload changes, key/credential operations, cooldown reset and quota widgets are deliberately excluded from the alpha; see [administrative scope and reasons](docs/admin-scope.md). Some upstream read endpoints return credentials, and cooldown reset lacks the required rollback contract. Manager Plus prices have a recorded-source contract and synthetic loopback probe (`npm run test:manager`), not real-image certification. Setup tests against UI mocks do not replace a manual TUI usability check. No production server changes have been performed during development.
 
 ## Installation (development)
 
@@ -201,7 +205,7 @@ npm pack --dry-run
 
 Pi supplies host peers when loading managed packages. For local development, make installed host packages available via local links or dev tooling; never bundle them in the published package.
 
-The current suite has **152 passing tests** locally, including administrative conflict detection, lost acknowledgments, journal failures, rollback recovery and cancellation. These tests do not establish compatibility with an arbitrary deployed Manager version.
+The current suite has **152 passing tests** locally, including administrative conflict detection, lost acknowledgments, journal failures, rollback recovery and cancellation. The packed Pi probe also executes the real `read` tool, verifies streamed final text and resumes persisted tool/text history against a synthetic gateway. These tests do not establish deployed-CPA compatibility or compatibility with an arbitrary Manager version; optional Manager certification is not a core adapter release gate.
 
 Pi/update probes use isolated homes, synthetic credentials and a mock gateway; they never call a production model or alter global Pi settings. The optional server-profile probe downloads a checksum-verified native CLIProxyAPI v8.0.13 Darwin arm64 binary and exercises its HTTP API locally with synthetic OAuth auth, no completions. Other platforms may supply a binary explicitly; this is labeled separately, not automatically certified. They retain concise JSON evidence under `.artifacts/` (gitignored). The update probe exercises Git package updates through local repositories; it does **not** authenticate to a real private GitHub repository.
 

@@ -14,7 +14,7 @@ Tested locally with Pi 1.0.2's host packages on macOS / Node 26. No SDK source o
 | Protected fetch/body boundary | yes | yes | yes | no |
 | Cross-origin redirect refused | yes | yes | yes | pending |
 
-Images are synthetic 1px PNG data, not evidence of vision understanding. Tool fixtures prove native serialization and replay for one function, not tool execution permission, concurrent tools or full Pi agent orchestration.
+Images are synthetic 1px PNG data, not evidence of vision understanding. Tool fixtures prove native serialization and replay for one function. The separate packed-package `scripts/probe-pi.ts` runs real Pi CLI against synthetic Chat Completions, executes its built-in `read` tool on a temporary fixture, verifies the returned result and text deltas, then resumes persisted tool/text history. This establishes basic Pi agent integration, not concurrent tools or deployed-CPA behavior.
 
 ## Two distinct network legs — Google is not broken
 
@@ -37,7 +37,7 @@ OpenAI/Anthropic requests use this custom fetch and `redirect: error`. A second 
 - Google Pi→CPA raw internal error/log/redirect behavior remains unverified for additional hardening. It is not a blocker for the demonstrated functionality; keep the native SDK, do not replace it or duplicate CPA upstream work. Do not claim universal no-secret logging.
 - Normal completion transport does not currently add its own server timeout policy: native caller timeout/signal handling applies. Discovery/admin timeouts are independent.
 - Retries, 429 cooldown, session affinity and actual served-backend billing remain server/native concerns; mock success does not prove CPA failover.
-- Multiple/interleaved function calls, reasoning signatures, long streams, constrained sampling, unsupported finish types, session replay across models and actual image preprocessing need expanded coverage.
+- Multiple/interleaved function calls, reasoning signatures, long streams, constrained sampling, unsupported finish types, session replay across models and actual image preprocessing lack expanded coverage. These are deferred robustness work, not newly required adapter features; fix specific defects if observed.
 - Input limits and context metadata cannot establish a real million-token capacity.
 
-Evidence is the original `tests/transports.test.ts` and `tests/stream-boundary.test.ts`, plus the full `npm test` run. Current total is **127 tests**; `npm run check`, packed Pi CLI probe and public/private Git update probe also pass after these changes.
+Evidence is the original `tests/transports.test.ts` and `tests/stream-boundary.test.ts`, plus the full `npm test` run. Current total is **152 tests**; `npm run check`, packed Pi CLI probe and public/private Git update probe also pass after these changes.
