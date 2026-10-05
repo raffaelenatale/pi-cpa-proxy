@@ -35,7 +35,7 @@ The private artifact is installed instead of the public/legacy engine, not along
 ## Remaining implementation and certification
 
 - [ ] Complete the inventory of legacy operational logic and versioned feature research; record adopted/deferred/excluded behavior.
-- [ ] Secure, separately enabled server-side connector for compatible-provider primary/fallback groups, priorities and ownership. Never persist upstream keys in client journals or invent API endpoints.
+- [x] Secure, separately enabled server-side connector for compatible-provider primary/fallback groups, priorities and ownership. Never persist upstream keys in client journals or invent API endpoints.
 - [ ] Certify Manager Plus adapter against an isolated real version/image; keep full-table/no-CAS limitation explicit.
 - [ ] Decide and implement scoped quota/key/alias/cooldown capabilities or explicitly document supported exclusions.
 - [ ] Richer provenance/diagnostics, optional external catalogue enrichment, schema migration and machine-preset selection.

@@ -14,8 +14,8 @@ import type { ExtensionCommandContext } from '@earendil-works/pi-coding-agent';
 
 const primary = { name: 'origin-alpha', alias: 'unrelated', fork: true, 'force-mapping': false };
 async function fixture() {
-  let aliases = { codex: [primary], antigravity: [] };
-  let settings = { codex: [{ name: 'origin-alpha', alias: 'unrelated', 'max-context-length': 50000 }], antigravity: [] };
+  let aliases: Record<string, Array<{ name: string; alias: string; fork?: boolean; 'force-mapping'?: boolean; 'display-name'?: string }>> = { codex: [primary], antigravity: [] };
+  let settings: Record<string, Array<{ name: string; alias?: string; 'max-context-length'?: number }>> = { codex: [{ name: 'origin-alpha', alias: 'unrelated', 'max-context-length': 50000 }], antigravity: [] };
   let patches = 0, mode = 'normal', collision = false, responseInvalid = false;
   const paths: string[] = [];
   const unrelated = { 'api-keys': { secret: 'UPSTREAM_HIDDEN' }, routing: { strategy: 'fill-first', 'session-affinity': true }, requests: { payload: { rules: ['unchanged'] } } };
@@ -218,7 +218,7 @@ test('journal lock or already aborted operation sends no PATCH', async () => {
 test('cancelled UI and headless invocation never publish', async () => {
   const f = await fixture();
   try {
-    const choices = ['test-proxy', 'Preview / publish OAuth aliases']; const notices: string[] = [];
+    const choices = ['test-proxy', 'Preview / publish server aliases']; const notices: string[] = [];
     const ctx = { hasUI: true, waitForIdle: async () => {}, ui: { select: async () => choices.shift(), confirm: async () => false,
       notify: (text: string) => notices.push(text) } } as unknown as ExtensionCommandContext;
     await runServerProfileCommand(ctx, { schemaVersion: 1, connections: { 'test-proxy': { ...f.gateway, serverAdmin: f.config } } }, f.directory);
@@ -257,4 +257,69 @@ test('fixed HTTP allowlist rejects full config reads and arbitrary writes', asyn
   await assert.rejects(() => profileHttp('https://example.invalid', '/v8/management/config', 'synthetic', 1000, signal()), /admin_path_forbidden/);
   await assert.rejects(() => profileHttp('https://example.invalid', '/v8/management/config/api-keys', 'synthetic', 1000, signal()), /admin_path_forbidden/);
   await assert.rejects(() => profileHttp('https://example.invalid', '/v8/management/config', 'synthetic', 1000, signal(), { 'api-keys': [] }), /admin_patch_scope_forbidden/);
+});
+test('compatible primary/fallback group publishing, catalogue verification and atomic rollback', async () => {
+  const f = await fixture();
+  try {
+    const before = f.snapshot();
+    const configWithGroup = serverAdminSpec.parse({
+      ...f.config,
+      aliases: {},
+      compatibleGroups: {
+        'mixed-group': {
+          primary: { channel: 'codex', model: 'origin-alpha' },
+          fallback: { channel: 'antigravity', model: 'origin-beta' },
+          contextWindow: 1000000,
+        },
+      },
+    });
+    const client = openServerProfiles(configWithGroup, f.gateway, f.directory);
+    const plan = await client.preview(signal());
+    assert.deepEqual(plan.changed, ['mixed-group']);
+    assert.deepEqual(plan.channels.sort(), ['antigravity', 'codex']);
+    const txId = await client.apply(plan, profileStamp(plan), signal());
+    assert.equal(f.patches(), 1);
+    const published = f.snapshot();
+    assert.equal(published.aliases.codex.some((r) => r.alias === 'mixed-group' && r.name === 'origin-alpha'), true);
+    assert.equal(published.aliases.antigravity.some((r) => r.alias === 'mixed-group' && r.name === 'origin-beta'), true);
+    assert.equal(published.settings.codex.some((r) => r.alias === 'mixed-group' && r['max-context-length'] === 1000000), true);
+    assert.equal(published.settings.antigravity.some((r) => r.alias === 'mixed-group' && r['max-context-length'] === 1000000), true);
+    // Inspection reports compatiblePrimaryFallback enabled
+    const status = await client.inspect(signal());
+    assert.equal(status.compatiblePrimaryFallback, true);
+    assert.equal(status.ownedAliases, 1);
+    // Rollback restores initial snapshot without traces
+    await client.rollback(txId, signal());
+    assert.deepEqual(f.snapshot(), before);
+    assert.equal((await client.inspect(signal())).ownedAliases, 0);
+  } finally { await f.close(); }
+});
+test('compatible group rejects collisions with OAuth aliases and chains', () => {
+  const base = {
+    kind: 'cli-proxy-api-v8', endpoint: 'https://example.invalid', credential: { kind: 'env', name: 'KEY' },
+    allowProfileWrites: true, exclusiveConfigWriter: true, acceptLayoutMigration: true,
+  };
+  // Collision with existing alias ID
+  assert.throws(() => serverAdminSpec.parse({
+    ...base,
+    aliases: { 'same-id': { channel: 'codex', model: 'origin-alpha', contextWindow: 1000 } },
+    compatibleGroups: {
+      'same-id': {
+        primary: { channel: 'codex', model: 'origin-alpha' },
+        fallback: { channel: 'antigravity', model: 'origin-beta' },
+        contextWindow: 1000,
+      },
+    },
+  }), /compatible_group_collision_with_oauth_alias/);
+  // Self-referencing model
+  assert.throws(() => serverAdminSpec.parse({
+    ...base,
+    compatibleGroups: {
+      'self-ref': {
+        primary: { channel: 'codex', model: 'self-ref' },
+        fallback: { channel: 'antigravity', model: 'origin-beta' },
+        contextWindow: 1000,
+      },
+    },
+  }), /compatible_group_chain_or_self_reference/);
 });

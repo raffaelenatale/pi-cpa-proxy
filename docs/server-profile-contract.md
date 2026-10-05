@@ -27,6 +27,7 @@ The adapter sends alias and context changes together rather than issuing two sep
 ## Supported behavior
 
 - Generic OAuth channel alias with `fork: true` to retain the original model, and explicit alias-specific context metadata.
+- Compatible-provider primary/fallback groups: mapped via scoped primary/fallback rows on existing channels with `fork: true` without client transmission or persistence of upstream credentials.
 - Explicit server configuration block, separate from Pi `profiles` metadata and Manager prices.
 - Only channels already present in both alias/settings maps. Missing map/channel initialization is an explicit operator task; the adapter refuses rather than creating keys it cannot exactly undo.
 - Source must be present in the client catalogue and not another known OAuth alias. A catalogue alone does not prove provider/channel membership or completion capability. No fuzzy owner inference or alias-chain support.
@@ -42,9 +43,11 @@ The adapter sends alias and context changes together rather than issuing two sep
 
 ## Deliberate exclusions
 
-Compatible provider primary/fallback groups contain upstream credentials. Reading/saving entire groups would violate the secret-free client journal boundary. They are **not implemented by this adapter**, nor disguised as client member metadata. Fixed server effort/payload rules and priorities are also outside this milestone.
+Upstream API keys and raw provider credential sections (`api-keys.openai-compatibility[].api-key`) live exclusively on the server and are never downloaded, modified or persisted into client journals. The compatible group adapter operates strictly on channel model mappings and context boundaries, preserving server-side routing, affinities and cooldowns without handling upstream tokens.
 
-A future explicit connector must keep upstream secrets on the server (or securely resolve references), support scoped ownership and backups, and prove routing/cooldown/affinity independently. No connector is auto-selected and no SSH command is accepted from YAML.
+Fixed server effort/payload rules (`requests.payload`) and dynamic server priorities remain managed directly by the server configuration, outside client runtime metadata.
+
+A future connector for remote file manipulation or SSH orchestration is intentionally excluded from the client engine: no SSH command is accepted from YAML and no arbitrary command runner is exposed.
 
 ## Native verification
 

@@ -68,6 +68,17 @@ export const serverAdminSpec = z.strictObject({
     channel: z.enum(['codex', 'antigravity', 'claude', 'gemini-cli', 'aistudio', 'kimi', 'kimi-ai', 'xai', 'devin', 'meta']),
     model: identifier, contextWindow: positive,
   })).default({}),
+  compatibleGroups: z.record(identifier, z.strictObject({
+    primary: z.strictObject({
+      channel: z.enum(['codex', 'antigravity', 'claude', 'gemini-cli', 'aistudio', 'kimi', 'kimi-ai', 'xai', 'devin', 'meta']),
+      model: identifier,
+    }),
+    fallback: z.strictObject({
+      channel: z.enum(['codex', 'antigravity', 'claude', 'gemini-cli', 'aistudio', 'kimi', 'kimi-ai', 'xai', 'devin', 'meta']),
+      model: identifier,
+    }),
+    contextWindow: positive,
+  })).default({}),
 }).superRefine((v, ctx) => {
   let url: URL;
   try { url = new URL(v.endpoint); } catch { return; }
@@ -81,6 +92,21 @@ export const serverAdminSpec = z.strictObject({
   const aliases = Object.keys(v.aliases).map((id) => id.toLowerCase());
   if (new Set(aliases).size !== aliases.length || Object.entries(v.aliases).some(([id, spec]) => aliases.includes(spec.model.toLowerCase()) || id.toLowerCase() === spec.model.toLowerCase())) {
     ctx.addIssue({ code: 'custom', message: 'server_alias_chain_or_duplicate' });
+  }
+  const groups = Object.keys(v.compatibleGroups).map((id) => id.toLowerCase());
+  if (new Set(groups).size !== groups.length) {
+    ctx.addIssue({ code: 'custom', message: 'duplicate_compatible_group_id' });
+  }
+  for (const [id, spec] of Object.entries(v.compatibleGroups)) {
+    const idLower = id.toLowerCase();
+    if (aliases.includes(idLower)) {
+      ctx.addIssue({ code: 'custom', message: 'compatible_group_collision_with_oauth_alias' });
+    }
+    const primLower = spec.primary.model.toLowerCase();
+    const fallLower = spec.fallback.model.toLowerCase();
+    if (primLower === idLower || fallLower === idLower || aliases.includes(primLower) || aliases.includes(fallLower) || groups.includes(primLower) || groups.includes(fallLower)) {
+      ctx.addIssue({ code: 'custom', message: 'compatible_group_chain_or_self_reference' });
+    }
   }
 });
 export const managerSpec = z.strictObject({

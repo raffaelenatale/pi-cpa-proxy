@@ -52,12 +52,17 @@ function expectedOwnershipSnapshot(journal?: Journal): Snapshot | undefined {
 }
 function buildPlan(config: ServerAdministration, before: Snapshot, journal?: Journal): ServerProfilePlan {
   if (journal && !['applied', 'rolled-back'].includes(journal.state)) throw new ProxyFault('profile_transaction_open');
-  const owned = Object.keys(config.aliases).sort();
+  // Combine single OAuth aliases and compatible primary/fallback groups
+  const ownedOAuth = Object.keys(config.aliases);
+  const ownedGroups = Object.keys(config.compatibleGroups);
+  const owned = [...ownedOAuth, ...ownedGroups].sort();
   const previousOwned = ownership(journal);
   if (previousOwned.some((alias) => !owned.includes(alias))) throw new ProxyFault('profile_removal_requires_rollback');
   const expectedPrevious = expectedOwnershipSnapshot(journal);
   const after = structuredClone(before);
   const channels = new Set<string>(), changed: string[] = [];
+
+  // 1. Process single OAuth aliases
   for (const [alias, spec] of Object.entries(config.aliases).sort(([a], [b]) => a.localeCompare(b))) {
     // Existing channels only: rollback can restore exact arrays without inventing/deleting map keys.
     if (!Object.hasOwn(before.aliases, spec.channel) || !Object.hasOwn(before.settings, spec.channel)) throw new ProxyFault('profile_channel_not_initialized');
@@ -78,6 +83,42 @@ function buildPlan(config: ServerAdministration, before: Snapshot, journal?: Jou
     after.settings[spec.channel].push({ name: spec.model, alias, 'max-context-length': spec.contextWindow });
     if (!same(rows, aliasRows(after, alias)) || !same(settings, settingRows(after, alias))) changed.push(alias);
   }
+
+  // 2. Process compatible primary/fallback groups
+  for (const [groupId, spec] of Object.entries(config.compatibleGroups).sort(([a], [b]) => a.localeCompare(b))) {
+    const { primary, fallback, contextWindow } = spec;
+    if (!Object.hasOwn(before.aliases, primary.channel) || !Object.hasOwn(before.settings, primary.channel)) {
+      throw new ProxyFault('profile_channel_not_initialized');
+    }
+    if (!Object.hasOwn(before.aliases, fallback.channel) || !Object.hasOwn(before.settings, fallback.channel)) {
+      throw new ProxyFault('profile_channel_not_initialized');
+    }
+    if (aliasRows(before, primary.model).length || aliasRows(before, fallback.model).length) {
+      throw new ProxyFault('profile_source_is_alias');
+    }
+    const rows = aliasRows(before, groupId), settings = settingRows(before, groupId);
+    if (!previousOwned.includes(groupId)) {
+      if (rows.length || settings.length) throw new ProxyFault('profile_unowned_alias_collision');
+    } else if (!expectedPrevious || !same(rows, aliasRows(expectedPrevious, groupId)) || !same(settings, settingRows(expectedPrevious, groupId))) {
+      throw new ProxyFault('profile_owned_resource_changed');
+    }
+    for (const name of [primary.channel, fallback.channel, ...rows.map((r) => r.channel), ...settings.map((r) => r.channel)]) {
+      channels.add(name);
+    }
+    for (const name of channels) {
+      after.aliases[name] = after.aliases[name].filter((row) => row.alias.toLowerCase() !== groupId.toLowerCase());
+      after.settings[name] = after.settings[name].filter((row) => row.alias?.toLowerCase() !== groupId.toLowerCase());
+    }
+    // Primary row
+    after.aliases[primary.channel].push(aliasEntry.parse({ name: primary.model, alias: groupId, fork: true, 'display-name': `CPA ${groupId} · primary` }));
+    after.settings[primary.channel].push({ name: primary.model, alias: groupId, 'max-context-length': contextWindow });
+    // Fallback row
+    after.aliases[fallback.channel].push(aliasEntry.parse({ name: fallback.model, alias: groupId, fork: true, 'display-name': `CPA ${groupId} · fallback` }));
+    after.settings[fallback.channel].push({ name: fallback.model, alias: groupId, 'max-context-length': contextWindow });
+
+    if (!same(rows, aliasRows(after, groupId)) || !same(settings, settingRows(after, groupId))) changed.push(groupId);
+  }
+
   // Array order itself matters to CPA. Retain exact before if rows are semantically already equal.
   if (!changed.length) return { target: targetStamp(config), configStamp: profileStamp(config), before, after: structuredClone(before), channels: [], previousOwned, owned, changed };
   return { target: targetStamp(config), configStamp: profileStamp(config), before, after, channels: [...channels].sort(), previousOwned, owned, changed };
@@ -147,7 +188,10 @@ export function openServerProfiles(unchecked: ServerAdministration, gateway: Pic
     const expected = plan.owned.map((alias) => alias.toLowerCase());
     for (let attempt = 0; attempt < 12; attempt++) {
       const actual = await listing(keys, signal);
-      if (expected.every((alias) => actual.has(alias)) && Object.values(config.aliases).every((spec) => actual.has(spec.model.toLowerCase()))) return;
+      const allListed = expected.every((alias) => actual.has(alias)) &&
+        Object.values(config.aliases).every((spec) => actual.has(spec.model.toLowerCase())) &&
+        Object.values(config.compatibleGroups).every((spec) => actual.has(spec.primary.model.toLowerCase()) && actual.has(spec.fallback.model.toLowerCase()));
+      if (allListed) return;
       if (signal.aborted) throw new ProxyFault('admin_aborted');
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
@@ -157,9 +201,10 @@ export function openServerProfiles(unchecked: ServerAdministration, gateway: Pic
     async inspect(signal: AbortSignal) {
       const keys = await credentials(signal); const snapshot = await stableSnapshot(keys, signal);
       const journal = await journalFile(path);
-      return { channels: Object.keys(snapshot.aliases).length, configuredAliases: Object.keys(config.aliases).length,
+      const configuredTotal = Object.keys(config.aliases).length + Object.keys(config.compatibleGroups).length;
+      return { channels: Object.keys(snapshot.aliases).length, configuredAliases: configuredTotal,
         ownedAliases: ownership(journal.value).length, transaction: journal.value?.state ?? 'none',
-        writes: config.allowProfileWrites, compareAndSwap: false, compatiblePrimaryFallback: false };
+        writes: config.allowProfileWrites, compareAndSwap: false, compatiblePrimaryFallback: Object.keys(config.compatibleGroups).length > 0 };
     },
     async preview(signal: AbortSignal): Promise<ServerProfilePlan> {
       const keys = await credentials(signal); const before = await stableSnapshot(keys, signal);
@@ -168,6 +213,14 @@ export function openServerProfiles(unchecked: ServerAdministration, gateway: Pic
       for (const [alias, spec] of Object.entries(config.aliases)) {
         if (!models.has(spec.model.toLowerCase())) throw new ProxyFault('profile_source_not_listed');
         if (!plan.previousOwned.includes(alias) && models.has(alias.toLowerCase())) throw new ProxyFault('profile_catalogue_alias_collision');
+      }
+      for (const [groupId, spec] of Object.entries(config.compatibleGroups)) {
+        if (!models.has(spec.primary.model.toLowerCase()) || !models.has(spec.fallback.model.toLowerCase())) {
+          throw new ProxyFault('profile_source_not_listed');
+        }
+        if (!plan.previousOwned.includes(groupId) && models.has(groupId.toLowerCase())) {
+          throw new ProxyFault('profile_catalogue_alias_collision');
+        }
       }
       return plan;
     },
@@ -184,6 +237,14 @@ export function openServerProfiles(unchecked: ServerAdministration, gateway: Pic
         for (const [alias, spec] of Object.entries(config.aliases)) {
           if (!models.has(spec.model.toLowerCase())) throw new ProxyFault('profile_source_not_listed');
           if (!plan.previousOwned.includes(alias) && models.has(alias.toLowerCase())) throw new ProxyFault('profile_catalogue_alias_collision');
+        }
+        for (const [groupId, spec] of Object.entries(config.compatibleGroups)) {
+          if (!models.has(spec.primary.model.toLowerCase()) || !models.has(spec.fallback.model.toLowerCase())) {
+            throw new ProxyFault('profile_source_not_listed');
+          }
+          if (!plan.previousOwned.includes(groupId) && models.has(groupId.toLowerCase())) {
+            throw new ProxyFault('profile_catalogue_alias_collision');
+          }
         }
         if (prior.value) {
           const archive = join(directory, `${prior.value.id}.json`), existing = await journalFile(archive);
