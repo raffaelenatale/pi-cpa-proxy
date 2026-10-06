@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createProvider, lazyApi, type Provider, type RefreshModelsContext } from "@earendil-works/pi-ai";
+import { createProvider, lazyApi, type Provider, type ProviderStreams, type RefreshModelsContext } from "@earendil-works/pi-ai";
 import { z } from "zod";
 import { deriveCatalogue, type ListingEntry, type SeedLookup } from "./catalogue.ts";
 import { ProxyFault, safeFailure, writePrivateFile } from "./configuration.ts";
@@ -14,11 +14,27 @@ const listingSpec = z.strictObject({
   checkedAt: z.number().int().nonnegative(),
   identity: z.string(),
 });
+type CompatFactory = 'openAICompletionsApi' | 'openAIResponsesApi' | 'anthropicMessagesApi' | 'googleGenerativeAIApi';
+/**
+ * Pi's extension loader aliases only selected pi-ai entrypoints (root, compat, oauth, providers/all) to the
+ * host copy; `pi-ai/api/*` subpaths do not resolve from packages installed without their own pi-ai
+ * (git/npm installs). Prefer the host instance via compat, fall back to the subpath when compat is gone.
+ */
+function hostApi(factory: CompatFactory, load: () => Promise<ProviderStreams>): ProviderStreams {
+  return lazyApi(async () => {
+    try {
+      const compat = await import('@earendil-works/pi-ai/compat') as Partial<Record<CompatFactory, () => ProviderStreams>>;
+      const make = compat[factory];
+      if (typeof make === 'function') return make();
+    } catch { /* compat entrypoint removed: use the direct API subpath below. */ }
+    return load();
+  });
+}
 const implementations = {
-  'openai-completions': guardedStreams(lazyApi(() => import('@earendil-works/pi-ai/api/openai-completions'))),
-  'openai-responses': guardedStreams(lazyApi(() => import('@earendil-works/pi-ai/api/openai-responses'))),
-  'anthropic-messages': guardedStreams(lazyApi(() => import('@earendil-works/pi-ai/api/anthropic-messages'))),
-  'google-generative-ai': guardedStreams(lazyApi(() => import('@earendil-works/pi-ai/api/google-generative-ai'))),
+  'openai-completions': guardedStreams(hostApi('openAICompletionsApi', () => import('@earendil-works/pi-ai/api/openai-completions'))),
+  'openai-responses': guardedStreams(hostApi('openAIResponsesApi', () => import('@earendil-works/pi-ai/api/openai-responses'))),
+  'anthropic-messages': guardedStreams(hostApi('anthropicMessagesApi', () => import('@earendil-works/pi-ai/api/anthropic-messages'))),
+  'google-generative-ai': guardedStreams(hostApi('googleGenerativeAIApi', () => import('@earendil-works/pi-ai/api/google-generative-ai'))),
 };
 export interface GatewayHealth {
   source: 'empty' | 'cache' | 'live'; checkedAt: number; omitted: number; missingProfiles: number;
