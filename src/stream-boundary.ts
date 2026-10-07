@@ -1,17 +1,29 @@
 import { isContextOverflow, createAssistantMessageEventStream, type AssistantMessageEventStream, type ProviderStreams, type Model, type Api, type AssistantMessage } from '@earendil-works/pi-ai';
 
 import { protectedFetch } from './transport-fetch.ts';
+import { logStreamEvent } from './logger.ts';
 
 /** Keep native wire implementation; only normalize failed stream diagnostics at our boundary. */
 export function guardedStreams(native: ProviderStreams): ProviderStreams {
   function bridge(model: Model<Api>, start: () => AssistantMessageEventStream): AssistantMessageEventStream {
     const output = createAssistantMessageEventStream();
+    logStreamEvent('INFO', 'STREAM_START', { model: model.id, provider: model.provider, api: model.api });
     const clean = (message: AssistantMessage) => {
       if (message.stopReason === 'error' || message.stopReason === 'aborted') {
-        // No arbitrary upstream bodies, URLs, headers or exception messages enter Pi history.
-        // Keep context-overflow classification useful without preserving provider text.
+        const rawError = message.errorMessage;
+        const rawDiagnostics = message.diagnostics;
+        // Keep context-overflow classification useful without preserving provider text in Pi history.
         const overflow = isContextOverflow(message, model.contextWindow);
         message.errorMessage = message.stopReason === 'aborted' ? 'cpa_request_aborted' : overflow ? 'cpa_context_length_exceeded' : 'cpa_stream_failed';
+        logStreamEvent('ERROR', 'STREAM_FAILED', {
+          model: model.id,
+          provider: model.provider,
+          api: model.api,
+          stopReason: message.stopReason,
+          rawErrorMessage: rawError,
+          normalizedErrorMessage: message.errorMessage,
+          diagnostics: rawDiagnostics,
+        });
         delete message.diagnostics;
       }
     };
@@ -24,8 +36,24 @@ export function guardedStreams(native: ProviderStreams): ProviderStreams {
           if (event.type === 'done') clean(event.message);
           output.push(event);
         }
-        const result = await source.result(); clean(result); output.end(result);
-      } catch {
+        const result = await source.result();
+        clean(result);
+        if (result.stopReason !== 'error' && result.stopReason !== 'aborted') {
+          logStreamEvent('INFO', 'STREAM_COMPLETED', {
+            model: model.id,
+            provider: model.provider,
+            stopReason: result.stopReason,
+            usage: result.usage,
+          });
+        }
+        output.end(result);
+      } catch (thrown) {
+        logStreamEvent('ERROR', 'STREAM_THROWN', {
+          model: model.id,
+          provider: model.provider,
+          api: model.api,
+          error: thrown instanceof Error ? { message: thrown.message, stack: thrown.stack } : String(thrown),
+        });
         const message: AssistantMessage = {
           role: 'assistant', api: model.api, provider: model.provider, model: model.id, content: [], timestamp: Date.now(),
           stopReason: 'error', errorMessage: 'cpa_stream_failed',
