@@ -2,7 +2,7 @@
 
 An original, configuration-driven CLIProxyAPI provider extension for Pi.
 
-**Development alpha — npm release pending.** Implementation and release gates are tracked in [PLAN.md](PLAN.md); public development source is separate from a completed release. Current verified host: Pi 1.0.2 on macOS / Node 26. Linux and additional Pi versions require their own test runs before support is declared. This is not an upstream CLIProxyAPI project or a fork of another extension.
+**v0.1.0 — sequential releases, npm publication pending.** Implementation and release gates are tracked in [PLAN.md](PLAN.md); public development source is separate from a completed release. Current verified host: Pi 1.0.2 on macOS / Node 26. Linux and additional Pi versions require their own test runs before support is declared. This is not an upstream CLIProxyAPI project or a fork of another extension.
 
 ## Essential scope
 
@@ -25,7 +25,7 @@ This is a local **Pi → CPA adapter**, not a CPA administration suite. Configur
 
 ## Not implemented yet
 
-Actual compatible API-key provider-group routing administration, models.dev fetching, richer diagnostics, schema migrations and machine-preset selection are outside the current essential delivery. Live installation migration is a separate explicitly approved operation. Server fixed-effort/payload changes, key/credential operations, cooldown reset and quota widgets are deliberately excluded from the alpha; see [administrative scope and reasons](docs/admin-scope.md). Some upstream read endpoints return credentials, and cooldown reset lacks the required rollback contract. Manager Plus prices have a recorded-source contract and synthetic loopback probe (`npm run test:manager`), not real-image certification. Setup tests against UI mocks do not replace a manual TUI usability check. No production server changes have been performed during development.
+Actual compatible API-key provider-group routing administration, models.dev fetching, richer diagnostics, schema migrations and machine-preset selection are outside the current essential delivery. Live installation migration is a separate explicitly approved operation. Server fixed-effort/payload changes, key/credential operations, cooldown reset and quota widgets are deliberately excluded from current scope; see [administrative scope and reasons](docs/admin-scope.md). Some upstream read endpoints return credentials, and cooldown reset lacks the required rollback contract. Manager Plus prices have a recorded-source contract and synthetic loopback probe (`npm run test:manager`), not real-image certification. Setup tests against UI mocks do not replace a manual TUI usability check. No production server changes have been performed during development.
 
 ## Installation (development)
 
@@ -113,7 +113,7 @@ admin:
 
 Use the advanced `/cpa-setup` YAML editor for this block. Admin price configuration is intentionally separate from client metadata; no implicit publication occurs when editing a model cost. These rates affect Manager's local usage estimates, not upstream billing or CPA primary/fallback routing.
 
-`/cpa-admin` selects the connection and offers read-only status, preview/apply and rollback. Preview shows changed managed IDs and rates, including advanced-rule counts. Applying requires **both** `allowPriceWrites: true` and `exclusivePriceWriter: true`, plus explicit interactive approval of the exact preview. Headless mutations are not supported in this alpha.
+`/cpa-admin` selects the connection and offers read-only status, preview/apply and rollback. Preview shows changed managed IDs and rates, including advanced-rule counts. Applying requires **both** `allowPriceWrites: true` and `exclusivePriceWriter: true`, plus explicit interactive approval of the exact preview. Headless mutations are not supported in current scope.
 
 ### Full-table replacement limitation
 
@@ -214,7 +214,7 @@ Pi/update probes use isolated homes, synthetic credentials and a mock gateway; t
 
 Configuration is trusted local data, not a sandbox. No arbitrary shell commands or remote YAML includes are accepted. Discovery refuses redirects. OpenAI Completions/Responses and Anthropic streaming use a scoped protected fetch that refuses redirects, bounds individual SSE frames and rejects malformed/truncated frames before SDK parsing. Cross-origin refusal is tested. Google native streaming currently rejects custom fetch, so its transport-level redirect/body/log hardening is still unverified; no universal transport safety claim is made. Failed native stream diagnostics exposed to Pi are normalized to `cpa_stream_failed`, `cpa_request_aborted` or `cpa_context_length_exceeded`, preserving overflow detection without storing arbitrary server error bodies. Diagnostic stream events and HTTP errors are recorded in local logs (`~/.pi/agent/pi-cpa-proxy/logs/stream.log`) for detailed offline debugging. OpenAI/Anthropic HTTP error bodies are read only within a bounded classifier then replaced with safe codes before SDK parsing. Successful content/tool arguments are not sanitized; caller-supplied hooks, host debug policies and SDK-internal Google behavior require their own security review. No third-party catalogue requests or telemetry are performed by this extension; host Pi telemetry policy is controlled separately.
 
-The alpha retains no transcript or credential in its catalogue cache. Cache contains model IDs and can still be private metadata. Cache/journal pruning and richer provenance UI are pending. Price-table and narrow OAuth alias rollback are available; compatible-provider routing rollback is not yet implemented.
+The extension retains no transcript or credential in its catalogue cache. Cache contains model IDs and can still be private metadata. Cache/journal pruning and richer provenance UI are pending. Price-table and narrow OAuth alias rollback are available; compatible-provider routing rollback is not yet implemented.
 
 ## License
 

@@ -1,6 +1,6 @@
-# Development status — alpha foundation
+# Development status — 0.1.0 foundation
 
-Version: `0.1.0-alpha.1`. Public development source is available at https://github.com/raffaelenatale/pi-cpa-proxy (initial commit `89aeb15`); npm publication and a complete private distribution follow implementation and release gates in [PLAN.md](../PLAN.md). No npm or private distribution release exists yet.
+Version: `0.1.0`. Public development source is available at https://github.com/raffaelenatale/pi-cpa-proxy (initial commit `89aeb15`); npm publication and a complete private distribution follow implementation and release gates in [PLAN.md](../PLAN.md). No npm or private distribution release exists yet.
 
 ## Implemented and tested locally
 

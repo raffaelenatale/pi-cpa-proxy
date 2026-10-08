@@ -1,10 +1,10 @@
 # Administrative scope and deliberate exclusions
 
-The alpha supports two separately configured administration adapters: Manager Plus prices and CLIProxyAPI v8 OAuth model-alias/context publication. Neither runs at startup, setup, discovery, refresh or package update. Credentials are external references; server mutations require explicit UI approval, a private journal, verification and latest-transaction rollback within the documented scope.
+The extension supports two separately configured administration adapters: Manager Plus prices and CLIProxyAPI v8 OAuth model-alias/context publication. Neither runs at startup, setup, discovery, refresh or package update. Credentials are external references; server mutations require explicit UI approval, a private journal, verification and latest-transaction rollback within the documented scope.
 
 ## Capability decisions
 
-| Capability | Alpha scope | Reason / boundary |
+| Capability | Current scope | Reason / boundary |
 | --- | --- | --- |
 | Manager Plus model prices | Implemented; recorded-source and synthetic HTTP tests | Full-table PUT, no server CAS. Real isolated Manager image/version certification remains pending. |
 | OAuth aliases and alias-specific context | Implemented; native v8.0.13 probe for single-alias publication | Scoped reads and one PATCH, ownership and latest rollback. |
@@ -17,7 +17,7 @@ The alpha supports two separately configured administration adapters: Manager Pl
 | Authenticated arbitrary upstream calls, plugin administration/quota actions, logs and complete config/YAML | Deliberately excluded | Broad, unverified privilege and sensitive-output surface. No arbitrary endpoint or command runner is accepted. |
 | Fixed server effort/payload rules, provider priorities and session affinity | Server/operator managed | Client metadata and alias labels do not configure routing. |
 
-These are alpha support exclusions, not claims that CLIProxyAPI lacks these capabilities. Use the server's own administration tooling outside this extension. Do not add unsupported YAML flags: the strict schema rejects them.
+These are deliberate scope exclusions, not claims that CLIProxyAPI lacks these capabilities. Use the server's own administration tooling outside this extension. Do not add unsupported YAML flags: the strict schema rejects them.
 
 ## Inspected upstream evidence
 
@@ -36,4 +36,4 @@ Only contracts were examined; no upstream implementation or fixtures were copied
 
 `src/admin-http.ts` retains its fixed four-path allowlist: the two OAuth projections, scoped config PATCH and client model discovery. Manager prices use their separate fixed endpoint. Tests reject the excluded endpoint families before any network request, as well as unsupported quota/key/cooldown configuration fields.
 
-A future scope expansion needs a version-pinned, server-side secret-free projection, separate opt-in permissions, verified response sanitization, bounded output and explicit handling of ambiguous effects. A non-reversible routing action also needs an operator-approved exception to the rollback requirement; it must not be smuggled into the price/alias consent. Existing alpha flags grant no such permission.
+A future scope expansion needs a version-pinned, server-side secret-free projection, separate opt-in permissions, verified response sanitization, bounded output and explicit handling of ambiguous effects. A non-reversible routing action also needs an operator-approved exception to the rollback requirement; it must not be smuggled into the price/alias consent. Existing flags grant no such permission.

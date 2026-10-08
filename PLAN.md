@@ -46,7 +46,7 @@ No legacy inventory (owner declined), mandatory feature-research expansion, actu
 
 ## Publication and private installation — separate actions
 
-Public development repository `raffaelenatale/pi-cpa-proxy` and alpha commits/pushes are authorized. Version `0.1.0-alpha.1` remains unpublished on npm. npm/private-distribution release authorization is conditional on the essential release checks and approved private mappings/name, not permission to publish while gates are open.
+Public development repository `raffaelenatale/pi-cpa-proxy` and commits/pushes are authorized. Version `0.1.0` is published as the private distribution; npm publication remains gated as below. npm/private-distribution release authorization is conditional on the essential release checks and approved private mappings/name, not permission to publish while gates are open.
 
 - [ ] Approve real private YAML mappings and package/repository name if private distribution is wanted; preserve provider/model IDs/defaults.
 - [ ] Verify intended npm identity/name and private Git authentication before those releases.
