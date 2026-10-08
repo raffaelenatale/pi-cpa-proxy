@@ -11,6 +11,7 @@ Tested locally with Pi 1.0.2's host packages on macOS / Node 26. No SDK source o
 | HTTP errors / malformed / truncated stream fail | yes | yes | yes | yes |
 | Pending stream aborted | yes | yes | yes | yes |
 | Safe error result + overflow classification | yes | yes | yes | yes |
+| Transient errors stay Pi-retryable (fixed labels) | yes | yes | yes | yes |
 | Protected fetch/body boundary | yes | yes | yes | no |
 | Cross-origin redirect refused | yes | yes | yes | pending |
 
@@ -30,6 +31,10 @@ Malformed OpenAI SSE caused the SDK to log the raw invalid frame before creating
 
 OpenAI/Anthropic requests use this custom fetch and `redirect: error`. A second mock origin receives zero requests on tested 307 redirection. Google native API explicitly refuses custom fetch and retains its own network path; final failure events are normalized, but transport logs, redirects and body/frame bounds are not claimed hardened.
 
+## Retryable transient classification
+
+All error labels are fixed strings verified against the host's real `isRetryableAssistantError` in tests (no local copy of its regexes). `cpa_stream_failed: overloaded`, `: rate limit` and `: server error` map to Pi retryable; everything else, including quota/billing exhaustion arriving as 429 and the 400 "Third-party apps" extra-usage rejection, stays non-retryable with the neutral `cpa_stream_failed`. `cpa_request_aborted` and `cpa_context_length_exceeded` remain unchanged: overflow is handled by compaction, not retry. For non-2xx responses the sanitized body carries a fixed `type` derived from the status (`rate_limit_error`, `overloaded_error`, `api_error` or `cpa_http_failed`), with status and Retry-After headers preserved; `stream.log` keeps both `rawErrorMessage` and `normalizedErrorMessage`. For Google, whose SDK exposes no fetch hook, the unsanitized error body reaches the boundary and is classified from its numeric code and status strings (`RESOURCE_EXHAUSTED`, `UNAVAILABLE`, `INTERNAL`) without any body text entering Pi history; this path is verified with synthetic fixtures only.
+
 ## Scope and remaining risks
 
 - Safe failure diagnostics do not sanitize successful generated text, tool arguments or reasoning. Never ask a model to process credentials.
@@ -40,4 +45,4 @@ OpenAI/Anthropic requests use this custom fetch and `redirect: error`. A second 
 - Multiple/interleaved function calls, reasoning signatures, long streams, constrained sampling, unsupported finish types, session replay across models and actual image preprocessing lack expanded coverage. These are deferred robustness work, not newly required adapter features; fix specific defects if observed.
 - Input limits and context metadata cannot establish a real million-token capacity.
 
-Evidence is the original `tests/transports.test.ts` and `tests/stream-boundary.test.ts`, plus the full `npm test` run. Current total is **152 tests**; `npm run check`, packed Pi CLI probe and public/private Git update probe also pass after these changes.
+Evidence is the original `tests/transports.test.ts` and `tests/stream-boundary.test.ts`, plus the full `npm test` run. Current total is **203 tests**; `npm run check`, packed Pi CLI probe and public/private Git update probe also pass after these changes.

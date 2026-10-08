@@ -1,5 +1,6 @@
 import { isContextOverflow, type AssistantMessage, type FetchFunction } from '@earendil-works/pi-ai';
 import { logStreamEvent } from './logger.ts';
+import { sanitizedHttpType } from './error-classification.ts';
 
 /** OpenAI SDK parsers log malformed raw SSE frames. Reject them before parsing, without global console hooks. */
 export function protectedFetch(upstream: FetchFunction = globalThis.fetch): FetchFunction {
@@ -43,8 +44,10 @@ export function protectedFetch(upstream: FetchFunction = globalThis.fetch): Fetc
       });
       const overflow = isContextOverflow({ stopReason: 'error', errorMessage: privateText } as AssistantMessage);
       // Keep status and retry headers, never hand an untrusted error body to the SDK.
+      // The fixed type is derived from the status only, so stream-boundary can classify retryable failures.
       const message = overflow ? 'cpa_context_length_exceeded' : 'cpa_http_failed';
-      return new Response(JSON.stringify({ error: { message, type: 'cpa_http_failed', code: `http_${response.status}` } }), {
+      const type = sanitizedHttpType(response.status, privateText);
+      return new Response(JSON.stringify({ error: { message, type, code: `http_${response.status}` } }), {
         status: response.status, headers: response.headers,
       });
     }

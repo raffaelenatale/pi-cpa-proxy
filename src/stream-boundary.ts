@@ -2,30 +2,35 @@ import { isContextOverflow, createAssistantMessageEventStream, type AssistantMes
 
 import { protectedFetch } from './transport-fetch.ts';
 import { logStreamEvent } from './logger.ts';
+import { classifyFailure, isNormalizedError } from './error-classification.ts';
 
 /** Keep native wire implementation; only normalize failed stream diagnostics at our boundary. */
 export function guardedStreams(native: ProviderStreams): ProviderStreams {
   function bridge(model: Model<Api>, start: () => AssistantMessageEventStream): AssistantMessageEventStream {
     const output = createAssistantMessageEventStream();
     logStreamEvent('INFO', 'STREAM_START', { model: model.id, provider: model.provider, api: model.api });
+    // The same message object is seen several times (partial, error event, done, result).
+    // Normalize once: a second pass would see only the label and lose the classification.
+    const cleaned = new WeakSet<AssistantMessage>();
     const clean = (message: AssistantMessage) => {
-      if (message.stopReason === 'error' || message.stopReason === 'aborted') {
-        const rawError = message.errorMessage;
-        const rawDiagnostics = message.diagnostics;
-        // Keep context-overflow classification useful without preserving provider text in Pi history.
-        const overflow = isContextOverflow(message, model.contextWindow);
-        message.errorMessage = message.stopReason === 'aborted' ? 'cpa_request_aborted' : overflow ? 'cpa_context_length_exceeded' : 'cpa_stream_failed';
-        logStreamEvent('ERROR', 'STREAM_FAILED', {
-          model: model.id,
-          provider: model.provider,
-          api: model.api,
-          stopReason: message.stopReason,
-          rawErrorMessage: rawError,
-          normalizedErrorMessage: message.errorMessage,
-          diagnostics: rawDiagnostics,
-        });
-        delete message.diagnostics;
-      }
+      if (message.stopReason !== 'error' && message.stopReason !== 'aborted') return;
+      if (cleaned.has(message) || isNormalizedError(message.errorMessage)) return;
+      cleaned.add(message);
+      const rawError = message.errorMessage;
+      const rawDiagnostics = message.diagnostics;
+      // Keep context-overflow and retry classification without preserving provider text in Pi history.
+      const overflow = message.stopReason === 'error' && isContextOverflow(message, model.contextWindow);
+      message.errorMessage = message.stopReason === 'aborted' ? 'cpa_request_aborted' : overflow ? 'cpa_context_length_exceeded' : classifyFailure(rawError);
+      logStreamEvent('ERROR', 'STREAM_FAILED', {
+        model: model.id,
+        provider: model.provider,
+        api: model.api,
+        stopReason: message.stopReason,
+        rawErrorMessage: rawError,
+        normalizedErrorMessage: message.errorMessage,
+        diagnostics: rawDiagnostics,
+      });
+      delete message.diagnostics;
     };
     void (async () => {
       try {
@@ -54,9 +59,10 @@ export function guardedStreams(native: ProviderStreams): ProviderStreams {
           api: model.api,
           error: thrown instanceof Error ? { message: thrown.message, stack: thrown.stack } : String(thrown),
         });
+        const thrownMessage = thrown instanceof Error ? thrown.message : String(thrown);
         const message: AssistantMessage = {
           role: 'assistant', api: model.api, provider: model.provider, model: model.id, content: [], timestamp: Date.now(),
-          stopReason: 'error', errorMessage: 'cpa_stream_failed',
+          stopReason: 'error', errorMessage: classifyFailure(thrownMessage),
           usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
         };

@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createModels, Type, isContextOverflow } from '@earendil-works/pi-ai';
+import { createModels, Type, isContextOverflow, isRetryableAssistantError } from '@earendil-works/pi-ai';
 import { makeGateway, member } from './fixtures.ts';
 import { openGateway } from '../src/gateway.ts';
 import type { WireApi } from '../src/schema.ts';
@@ -69,6 +69,13 @@ async function fixture(api: WireApi) {
     const data = JSON.parse(raw); payloads.push(data);
     started();
     if (mode === 'redirect') { res.writeHead(307, { Location: redirectTarget }); res.end(); return; }
+    if (mode.startsWith('status-')) {
+      const status = Number(mode.slice(7)), message = 'Third-party apps now draw from your extra usage TRANSPORT_SYNTHETIC';
+      // Google's SDK exposes no fetch hook, so its body is the raw JSON with numeric code and status string.
+      const body = api === 'google-generative-ai' ? { error: { code: status, message, status: { 429: 'RESOURCE_EXHAUSTED', 503: 'UNAVAILABLE', 529: 'UNAVAILABLE', 500: 'INTERNAL', 502: 'UNAVAILABLE', 504: 'DEADLINE_EXCEEDED', 400: 'INVALID_ARGUMENT' }[status] } } : { error: { message, type: 'invalid_request_error' } };
+      res.writeHead(status, { 'Content-Type': 'application/json', 'Retry-After': '1' }); res.end(JSON.stringify(body)); return;
+    }
+    if (mode === 'sse-overloaded') { res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end('event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded TRANSPORT_SYNTHETIC"}}\n\n'); return; }
     if (mode === 'http-error' || mode === 'overflow') { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: mode === 'overflow' ? 'prompt is too long TRANSPORT_SYNTHETIC' : 'synthetic upstream rejection TRANSPORT_SYNTHETIC', type: 'invalid_request_error', code: 'invalid' } })); return; }
     res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.flushHeaders();
     if (mode === 'hang') return;
@@ -153,6 +160,35 @@ for (const api of apis) {
       assert.equal(message.stopReason, 'error'); assert.equal(hits, 0);
       assert.equal(message.errorMessage, 'cpa_stream_failed');
     } finally { await f.close(); target.closeAllConnections(); target.close(); await once(target, 'close'); }
+  });
+  const transient: [string, string][] = [
+    ['status-429', 'cpa_stream_failed: rate limit'],
+    ['status-529', 'cpa_stream_failed: overloaded'],
+    ['status-503', 'cpa_stream_failed: overloaded'],
+    ['status-500', 'cpa_stream_failed: server error'],
+    ['status-502', 'cpa_stream_failed: server error'],
+    ['status-504', 'cpa_stream_failed: server error'],
+    ['sse-overloaded', 'cpa_stream_failed: overloaded'],
+  ];
+  for (const [mode, label] of transient.filter(([mode]) => mode !== 'sse-overloaded' || api === 'anthropic-messages')) test(`${api}: ${mode} is retryable by Pi without provider text`, async () => {
+    const f = await fixture(api);
+    try {
+      f.setMode(mode);
+      const message = await f.registry.completeSimple(f.model, { messages: [user] }, { maxRetries: 0 });
+      assert.equal(message.errorMessage, label);
+      assert.equal(isRetryableAssistantError(message), true);
+      assert.doesNotMatch(JSON.stringify(message), /TRANSPORT_SYNTHETIC|Third-party/);
+    } finally { await f.close(); }
+  });
+  test(`${api}: 400 third-party usage is neutral and non-retryable`, async () => {
+    const f = await fixture(api);
+    try {
+      f.setMode('status-400');
+      const message = await f.registry.completeSimple(f.model, { messages: [user] }, { maxRetries: 0 });
+      assert.equal(message.errorMessage, 'cpa_stream_failed');
+      assert.equal(isRetryableAssistantError(message), false);
+      assert.doesNotMatch(JSON.stringify(message), /TRANSPORT_SYNTHETIC|Third-party/);
+    } finally { await f.close(); }
   });
   test(`${api}: redacted overflow retains Pi compaction detection`, async () => {
     const f = await fixture(api);
