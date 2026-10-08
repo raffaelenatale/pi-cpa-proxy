@@ -1,4 +1,5 @@
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { Type } from '@earendil-works/pi-ai';
+import { defineTool, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ProxyFault, readLayers, safeFailure, userConfigPath } from './configuration.ts';
@@ -6,7 +7,7 @@ import { openGateway, type GatewayHealth } from './gateway.ts';
 import { runSetup } from './setup.ts';
 import { runAdministration } from './admin-command.ts';
 import { runServerProfileCommand } from './profile-command.ts';
-import { profileMapRows, renderProfileMap } from './profile-map.ts';
+import { profileMapRows, profileMapText, type ProfileMapRow } from './profile-map.ts';
 
 export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
   const bundledPath = fileURLToPath(new URL('../config.yaml', import.meta.url));
@@ -44,6 +45,25 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
     });
     entryRendered = true;
   } catch { /* notify fallback below */ }
+  // Model-callable: lets the LLM read the same table when it has to choose a model. Reads the configuration on every call.
+  pi.registerTool(defineTool({
+    name: 'cpa_profile_map',
+    label: 'CPA profile map',
+    description: 'Table of the CPA role profiles (profile-*): default model, fallback, context window, selectable effort levels and when to use each. Call it before choosing a model for a task, subagent or delegation, then use the exact profile id as `<provider>/<profile>`.',
+    promptSnippet: 'cpa_profile_map: table of the CPA profile-* models (default, fallback, context, effort, when to use); consult it before choosing a model',
+    promptGuidelines: ['When you must choose or recommend a model (subagent, delegation, switching model), call cpa_profile_map first and choose by its "Quando usarlo" column. Never pick a profile whose text says "Da non usare".'],
+    parameters: Type.Object({}),
+    async execute(): Promise<{ content: { type: 'text'; text: string }[]; details: { connections?: { id: string; rows: ProfileMapRow[] }[]; error?: string } }> {
+      try {
+        const layers = await readLayers(bundledPath, localPath);
+        const connections = Object.entries(layers.config?.connections ?? {});
+        const text = connections.length ? profileMapText(connections, true) : 'CPA non configurato: nessun profilo disponibile.';
+        return { content: [{ type: 'text' as const, text }], details: { connections: connections.map(([id, gateway]) => ({ id, rows: profileMapRows(id, gateway) })) } };
+      } catch (error) {
+        return { content: [{ type: 'text' as const, text: `CPA profile map: ${safeFailure(error)}` }], details: { error: safeFailure(error) } };
+      }
+    },
+  }));
   pi.registerCommand('profile-map', {
     description: 'Show the role profiles: default model, fallback, selectable effort levels and purpose',
     handler: async (_args, ctx) => {
@@ -51,7 +71,7 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
         const layers = await readLayers(bundledPath, localPath);
         const connections = Object.entries(layers.config?.connections ?? {});
         if (!connections.length) { ctx.ui.notify('CPA not configured. Use /cpa-setup.', 'info'); return; }
-        const text = connections.map(([id, gateway]) => `${connections.length > 1 ? `### ${id}\n\n` : ''}${renderProfileMap(profileMapRows(id, gateway))}`).join('\n\n');
+        const text = profileMapText(connections);
         if (ctx.hasUI && entryRendered) pi.appendEntry('cpa-profile-map', { text });
         else ctx.ui.notify(text, 'info');
       } catch (error) { ctx.ui.notify(`CPA profile map: ${safeFailure(error)}`, 'error'); }

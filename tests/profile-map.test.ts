@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { profileMapRows, renderProfileMap } from '../src/profile-map.ts';
+import { profileMapRows, profileMapText, renderProfileMap } from '../src/profile-map.ts';
 import { validateConfiguration } from '../src/configuration.ts';
 import { makeGateway, member } from './fixtures.ts';
 
@@ -42,4 +42,12 @@ test('context uses Italian digit grouping', () => {
   const big = { ...member, contextWindow: 1048576, maxTokens: 65536 };
   const gateway = makeGateway({ models: { primary: big }, profiles: { role: { members: ['primary'] } } });
   assert.equal(profileMapRows('t', gateway)[0].context, '1.048.576');
+});
+test('shared text adds the provider/profile addressing hint only for the model-facing tool', () => {
+  const gateway = makeGateway({ profiles: { 'profile-a': { members: ['primary'], description: 'Main work' } } });
+  const plain = profileMapText([['cpa-vps', gateway]]);
+  const hinted = profileMapText([['cpa-vps', gateway]], true);
+  assert.ok(plain.startsWith('| Profilo |'));
+  assert.match(hinted, /^### cpa-vps\n\nSeleziona un profilo con l'id `cpa-vps\/<Profilo>` \(esempio: `cpa-vps\/profile-a`\)\.\n\n\| Profilo \|/);
+  assert.ok(hinted.endsWith(plain));
 });

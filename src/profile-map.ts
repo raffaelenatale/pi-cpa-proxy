@@ -45,3 +45,16 @@ export function renderProfileMap(rows: ProfileMapRow[]): string {
   const head = '| Profilo | Default | Fallback | Contesto | Effort possibili | Quando usarlo |\n|---|---|---|---|---|---|';
   return [head, ...rows.map((row) => `| ${[row.profile, row.default, row.fallback, row.context, row.efforts, row.usage].map(cell).join(' | ')} |`)].join('\n');
 }
+
+/**
+ * Text for one or more connections, shared by the /profile-map command and the model-callable tool.
+ * With `usageHint` each table is preceded by how to address a profile (`<provider>/<profile>`).
+ */
+export function profileMapText(connections: [string, Gateway][], usageHint = false): string {
+  return connections.map(([id, gateway]) => {
+    const rows = profileMapRows(id, gateway);
+    const title = connections.length > 1 || usageHint ? `### ${id}\n\n` : '';
+    const hint = usageHint && rows.length ? `Seleziona un profilo con l'id \`${id}/<Profilo>\` (esempio: \`${id}/${rows[0].profile}\`).\n\n` : '';
+    return `${title}${hint}${renderProfileMap(rows)}`;
+  }).join('\n\n');
+}
