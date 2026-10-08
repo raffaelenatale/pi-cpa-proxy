@@ -81,3 +81,11 @@ test('transport suffixes respect API, not upstream owner', () => {
   assert.equal(entranceUrl('https://proxy.example/', 'anthropic-messages'), 'https://proxy.example');
   assert.equal(entranceUrl('https://proxy.example/', 'google-generative-ai'), 'https://proxy.example/v1beta');
 });
+test('Anthropic managed-effort model can expose only off and low, and profile inherits the compat override', () => {
+  const haiku = { ...member, api: 'anthropic-messages' as const, compat: { supportsMidConvoEffort: false, forceAdaptiveThinking: true },
+    thinkingLevelMap: { minimal: null, medium: null, high: null, xhigh: null, max: null } };
+  const gateway = makeGateway({ models: { primary: haiku }, profiles: { role: { members: ['primary'], metadata: { api: 'anthropic-messages' } } } });
+  const model = deriveCatalogue('test-proxy', gateway, [{ id: 'role' }]).models[0];
+  assert.deepEqual(model.thinkingLevelMap, { off: 'off', minimal: null, low: 'low', medium: null, high: null, xhigh: null, max: null });
+  assert.deepEqual(model.compat, { supportsMidConvoEffort: false, forceAdaptiveThinking: true });
+});

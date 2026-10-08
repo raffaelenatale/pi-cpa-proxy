@@ -1,6 +1,6 @@
 {
   "name": "pi-cpa-proxy",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Configurable CLIProxyAPI provider for Pi with discovery, role profiles and safe setup",
   "type": "module",
   "license": "MIT",

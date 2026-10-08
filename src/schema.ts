@@ -31,6 +31,8 @@ const compatSpec = z.strictObject({
   supportsReasoningEffort: z.boolean().optional(), supportsStrictMode: z.boolean().optional(),
   maxTokensField: z.enum(["max_tokens", "max_completion_tokens"]).optional(),
   thinkingFormat: z.enum(["openai", "zai", "qwen"]).optional(), zaiToolStream: z.boolean().optional(),
+  // Anthropic Messages: managed-effort models force adaptive thinking and cannot be switched off unless this is false.
+  supportsMidConvoEffort: z.boolean().optional(), forceAdaptiveThinking: z.boolean().optional(),
 });
 const effortMap = z.partialRecord(z.enum(effortLevels), z.union([label, z.null()]));
 export const modelSpec = z.strictObject({

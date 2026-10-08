@@ -71,7 +71,7 @@ The wizard asks for **references**, not API key values. Populate the selected se
 
 `models` is a mapping from model ID to overrides. Define `contextWindow`, `maxTokens`, `input`, `reasoning` and all four `cost` rates for unknown models. Optional `source: {provider: ..., id: ...}` selects an exact Pi catalogue entry. `api` defaults to the connection's API; no inference from `owned_by` occurs.
 
-Other fields: `name`, `enabled`, `thinkingLevelMap`, `inputLimits` (request size, image counts and resize options), and selected Chat Completions `compat` flags. Compatibility beyond this initial schema is pending.
+Other fields: `name`, `enabled`, `thinkingLevelMap`, `inputLimits` (request size, image counts and resize options), and selected Chat Completions `compat` flags and the Anthropic `supportsMidConvoEffort`/`forceAdaptiveThinking` flags (set `supportsMidConvoEffort: false` on a managed-effort Claude model to let Pi send `thinking: disabled` for the `off` level). Compatibility beyond this initial schema is pending.
 
 Prices are estimates in USD per million tokens. `tiers` uses Pi's `inputTokensAbove` convention, with strictly increasing thresholds. Missing rates are not inferred as free.
 
