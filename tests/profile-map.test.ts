@@ -19,13 +19,13 @@ test('profile map lists default, fallback, selectable efforts and role in config
   });
   const rows = profileMapRows('test-proxy', gateway);
   assert.deepEqual(rows.map((row) => row.profile), ['profile-a', 'profile-b', 'profile-c']);
-  assert.deepEqual(rows[0], { profile: 'profile-a', default: 'Primary Model', fallback: 'Backup | Model', efforts: '`low`, `high`', role: 'Main work' });
+  assert.deepEqual(rows[0], { profile: 'profile-a', default: 'Primary Model', fallback: 'Backup | Model', context: '200.000', efforts: 'low, high', usage: 'Main work' });
   assert.equal(rows[1].fallback, 'Backup | Model', 'second member is the fallback when none is declared');
-  assert.equal(rows[1].efforts, 'fisso `high`');
+  assert.equal(rows[1].efforts, 'solo high (effort fisso)');
   assert.equal(rows[2].fallback, 'nessuno');
   assert.equal(rows[2].efforts, 'nessuno');
   const text = renderProfileMap(rows);
-  assert.match(text, /^\| Profilo \| Default \| Fallback \| Effort possibili \| Ruolo \|\n\|---\|---\|---\|---\|---\|\n/);
+  assert.match(text, /^\| Profilo \| Default \| Fallback \| Contesto \| Effort possibili \| Quando usarlo \|\n\|---\|---\|---\|---\|---\|---\|\n/);
   assert.match(text, /Backup \\\| Model/, 'pipes in names cannot break the table');
   assert.equal(text.split('\n').length, 5);
 });
@@ -37,4 +37,9 @@ test('declared fallback is display-only and does not change derived capabilities
   assert.throws(() => validateConfiguration({ schemaVersion: 1, connections: { x: { endpoint: 'http://127.0.0.1:8317', allowInsecureHttp: true,
     credential: { kind: 'env', name: 'CPA_TEST_KEY' }, profiles: { role: { members: ['primary'], fallback: '../x' } } } } }));
   assert.equal(renderProfileMap([]), 'Nessun profilo configurato.');
+});
+test('context uses Italian digit grouping', () => {
+  const big = { ...member, contextWindow: 1048576, maxTokens: 65536 };
+  const gateway = makeGateway({ models: { primary: big }, profiles: { role: { members: ['primary'] } } });
+  assert.equal(profileMapRows('t', gateway)[0].context, '1.048.576');
 });

@@ -18,7 +18,7 @@ This is a local **Pi → CPA adapter**, not a CPA administration suite. Configur
 - Strict, versioned YAML configuration; environment/file/Keychain **credential references**, never literal keys in config.
 - Public local configuration and private bundled configuration + persistent local overrides.
 - `/cpa-setup` connection wizard with explicit native protocol selection, advanced validated YAML editor and optional read-only client discovery check before saving. Setup writes only local configuration, never CPA or Pi defaults, and requires UI.
-- `/profile-map` prints a table of the configured role profiles (default model, fallback, selectable effort levels, role). It reads only the local configuration: the first member is the default, `fallback` (or the second member) the fallback, `description` the role text; no server request is made.
+- `/profile-map` prints a table of the configured role profiles (default model, fallback, context window, selectable effort levels, when to use). It reads only the local configuration: the first member is the default, `fallback` (or the second member) the fallback, `description` the "when to use" text; no server request is made.
 - `/cpa-status`, `/cpa-refresh-models` and optional `/cpa-admin` for Manager Plus price status, preview, approved apply and latest-transaction rollback.
 - `/cpa-server-profiles` for separately configured OAuth alias/context publication, ownership checks and latest rollback; single-alias behavior verified against an isolated native CLIProxyAPI v8.0.13 release. `compatibleGroups` adds alias/context rows on existing OAuth channels, not provider priorities or failover-order configuration.
 - Private distribution assembler, without a second copy of the source implementation.

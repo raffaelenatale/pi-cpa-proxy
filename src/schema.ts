@@ -59,7 +59,7 @@ const profileSpec = z.strictObject({
   metadata: modelSpec.omit({ source: true }).default({}),
   // Display-only (used by /profile-map): the first member is the default, `fallback` (or the second member)
   // is the model the server falls back to. `fallback` never takes part in capability derivation.
-  description: z.string().min(1).max(600).refine((s) => !/[\r\n\u0000]/.test(s)).optional(),
+  description: z.string().min(1).max(1200).refine((s) => !/[\r\n\u0000]/.test(s)).optional(),
   fallback: identifier.optional(),
 });
 export const serverAdminSpec = z.strictObject({
