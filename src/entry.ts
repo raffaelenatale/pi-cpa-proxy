@@ -6,6 +6,7 @@ import { openGateway, type GatewayHealth } from './gateway.ts';
 import { runSetup } from './setup.ts';
 import { runAdministration } from './admin-command.ts';
 import { runServerProfileCommand } from './profile-command.ts';
+import { profileMapRows, renderProfileMap } from './profile-map.ts';
 
 export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
   const bundledPath = fileURLToPath(new URL('../config.yaml', import.meta.url));
@@ -32,6 +33,30 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
     }
   } catch (error) { startupError = safeFailure(error); }
 
+  // Transcript-only rendering (entries never reach the model). Falls back to a notification if the host lacks the UI modules.
+  let entryRendered = false;
+  try {
+    const [{ Box, Markdown }, { getMarkdownTheme }] = await Promise.all([import('@earendil-works/pi-tui'), import('@earendil-works/pi-coding-agent')]);
+    pi.registerEntryRenderer<{ text: string }>('cpa-profile-map', (entry, _options, theme) => {
+      const box = new Box(1, 1, (text: string) => theme.bg('customMessageBg', text));
+      box.addChild(new Markdown(entry.data?.text ?? '', 0, 0, getMarkdownTheme()));
+      return box;
+    });
+    entryRendered = true;
+  } catch { /* notify fallback below */ }
+  pi.registerCommand('profile-map', {
+    description: 'Show the role profiles: default model, fallback, selectable effort levels and purpose',
+    handler: async (_args, ctx) => {
+      try {
+        const layers = await readLayers(bundledPath, localPath);
+        const connections = Object.entries(layers.config?.connections ?? {});
+        if (!connections.length) { ctx.ui.notify('CPA not configured. Use /cpa-setup.', 'info'); return; }
+        const text = connections.map(([id, gateway]) => `${connections.length > 1 ? `### ${id}\n\n` : ''}${renderProfileMap(profileMapRows(id, gateway))}`).join('\n\n');
+        if (ctx.hasUI && entryRendered) pi.appendEntry('cpa-profile-map', { text });
+        else ctx.ui.notify(text, 'info');
+      } catch (error) { ctx.ui.notify(`CPA profile map: ${safeFailure(error)}`, 'error'); }
+    },
+  });
   pi.registerCommand('cpa-setup', {
     description: 'Configure CPA connections or edit validated YAML overrides (no server writes)',
     handler: async (_args, ctx) => {
