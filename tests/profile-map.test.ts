@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { profileMapRows, profileMapText, renderProfileMap } from '../src/profile-map.ts';
+import { profileMapRows, profileMapText, profileShortcuts, renderProfileMap } from '../src/profile-map.ts';
 import { validateConfiguration } from '../src/configuration.ts';
 import { makeGateway, member } from './fixtures.ts';
 
@@ -50,4 +50,22 @@ test('shared text adds the provider/profile addressing hint only for the model-f
   assert.ok(plain.startsWith('| Profilo |'));
   assert.match(hinted, /^### cpa-vps\n\nSeleziona un profilo con l'id `cpa-vps\/<Profilo>` \(esempio: `cpa-vps\/profile-a`\)\.\n\n\| Profilo \|/);
   assert.ok(hinted.endsWith(plain));
+});
+
+test('profile shortcuts map profile-<suffix> to /<suffix> commands, first connection wins', () => {
+  const gateway = makeGateway({ profiles: {
+    'profile-high': { members: ['primary'] },
+    'profile-medium': { members: ['primary'] },
+    'not-a-profile': { members: ['primary'] },
+    'profile-': { members: ['primary'] },
+    'profile-With_Caps': { members: ['primary'] },
+  } });
+  const gateway2 = makeGateway({ profiles: { 'profile-high': { members: ['primary'] }, 'profile-extra': { members: ['primary'] } } });
+  const shortcuts = profileShortcuts([['first', gateway], ['second', gateway2]]);
+  assert.deepEqual(shortcuts, [
+    { suffix: 'high', connection: 'first', profile: 'profile-high' },
+    { suffix: 'medium', connection: 'first', profile: 'profile-medium' },
+    { suffix: 'extra', connection: 'second', profile: 'profile-extra' },
+  ]);
+  assert.deepEqual(profileShortcuts([]), []);
 });

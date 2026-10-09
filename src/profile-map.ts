@@ -19,6 +19,25 @@ function describeEfforts(map: Partial<Record<(typeof effortLevels)[number], stri
   return levels.join(', ');
 }
 
+/**
+ * Slash-command shortcuts for profiles: profile-<suffix> becomes a /<suffix> model-switch command.
+ * First connection wins on duplicate suffixes; invalid suffixes are skipped.
+ */
+export function profileShortcuts(connections: [id: string, gateway: Gateway][]): { suffix: string; connection: string; profile: string }[] {
+  const result: { suffix: string; connection: string; profile: string }[] = [];
+  const taken = new Set<string>();
+  for (const [connection, gateway] of connections) {
+    for (const profile of Object.keys(gateway.profiles)) {
+      if (!profile.startsWith('profile-')) continue;
+      const suffix = profile.slice('profile-'.length);
+      if (!suffix || !/^[a-z][a-z0-9-]*$/.test(suffix) || taken.has(suffix)) continue;
+      taken.add(suffix);
+      result.push({ suffix, connection, profile });
+    }
+  }
+  return result;
+}
+
 /** One row per configured profile, in configuration order. Pure: no network, no server state. */
 export function profileMapRows(provider: string, gateway: Gateway): ProfileMapRow[] {
   const ids = Object.keys(gateway.profiles);

@@ -7,7 +7,7 @@ import { openGateway, type GatewayHealth } from './gateway.ts';
 import { runSetup } from './setup.ts';
 import { runAdministration } from './admin-command.ts';
 import { runServerProfileCommand } from './profile-command.ts';
-import { profileMapRows, profileMapText, type ProfileMapRow } from './profile-map.ts';
+import { profileMapRows, profileMapText, profileShortcuts, type ProfileMapRow } from './profile-map.ts';
 
 export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
   const bundledPath = fileURLToPath(new URL('../config.yaml', import.meta.url));
@@ -15,9 +15,11 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
   const gateways: { id: string; health: GatewayHealth }[] = [];
   let startupError: string | undefined;
   let configured = false;
+  const profileCommands: { suffix: string; connection: string; profile: string }[] = [];
   try {
     const layers = await readLayers(bundledPath, localPath);
     configured = !!layers.config;
+    profileCommands.push(...profileShortcuts(Object.entries(layers.config?.connections ?? {})));
     for (const [id, connection] of Object.entries(layers.config?.connections ?? {})) {
       const opened = await openGateway(id, connection, join(dirname(localPath), 'cache'));
       // Pi registers new native providers cache-only; fetch in the awaited factory so
@@ -33,6 +35,26 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
       gateways.push({ id, health: opened.health });
     }
   } catch (error) { startupError = safeFailure(error); }
+
+  // /<suffix> model shortcuts: profile-high -> /high selects profile-high for this session.
+  for (const { suffix, connection, profile } of profileCommands) {
+    try {
+      pi.registerCommand(suffix, {
+        description: `Switch model to ${profile} (${connection})`,
+        handler: async (_args, ctx) => {
+          try {
+            const layers = await readLayers(bundledPath, localPath);
+            if (!layers.config?.connections[connection]?.profiles[profile]) throw new ProxyFault('profile_not_found');
+            const model = ctx.modelRegistry.getModelOfType('chat', connection, profile);
+            if (!model) { ctx.ui.notify(`/${suffix}: ${profile} not in the catalogue. Try /cpa-refresh-models.`, 'error'); return; }
+            await ctx.waitForIdle();
+            const switched = await pi.setModel(model);
+            ctx.ui.notify(switched ? `Model: ${model.provider}/${model.id}` : `/${suffix}: authentication not configured for ${connection}.`, switched ? 'info' : 'error');
+          } catch (error) { ctx.ui.notify(`/${suffix}: ${safeFailure(error)}`, 'error'); }
+        },
+      });
+    } catch { /* name collision with another command: skip this suffix */ }
+  }
 
   // Transcript-only rendering (entries never reach the model). Falls back to a notification if the host lacks the UI modules.
   let entryRendered = false;
