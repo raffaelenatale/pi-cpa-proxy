@@ -19,6 +19,7 @@ This is a local **Pi → CPA adapter**, not a CPA administration suite. Configur
 - Public local configuration and private bundled configuration + persistent local overrides.
 - `/cpa-setup` connection wizard with explicit native protocol selection, advanced validated YAML editor and optional read-only client discovery check before saving. Setup writes only local configuration, never CPA or Pi defaults, and requires UI.
 - `/profile-map` prints a table of the configured role profiles (default model, fallback, context window, selectable effort levels, when to use). It reads only the local configuration: the first member is the default, `fallback` (or the second member) the fallback, `description` the "when to use" text; no server request is made.
+- Optional `integrations.piWebAccess`: keeps pi-web-access' `web-search.json` pointed at CPA's Gemini search without storing the key (see below).
 - `/cpa-status`, `/cpa-refresh-models` and optional `/cpa-admin` for Manager Plus price status, preview, approved apply and latest-transaction rollback.
 - `/cpa-server-profiles` for separately configured OAuth alias/context publication, ownership checks and latest rollback; single-alias behavior verified against an isolated native CLIProxyAPI v8.0.13 release. `compatibleGroups` adds alias/context rows on existing OAuth channels, not provider priorities or failover-order configuration.
 - Private distribution assembler, without a second copy of the source implementation.
@@ -89,6 +90,28 @@ The server remains responsible for priority, quota failover and session affinity
 Private bundled config → local user override. Maps merge recursively; arrays replace; `null` removes a map key except inside `thinkingLevelMap`, where it means unsupported. Unknown schema fields, duplicate YAML keys, custom tags, aliases and prototype keys are rejected. Overrides are validated after merging.
 
 Config writes use a lock, expected-content check, restricted permissions, backup and atomic rename. Backups can contain private metadata; retain them privately. Symlink targets are rejected. Directory symlink hardening and stale lock recovery remain future work.
+
+### Pi web search through CPA (optional)
+
+If you use the [`pi-web-access`](https://www.npmjs.com/package/pi-web-access) extension, CPA can serve its `web_search` with Gemini's `google_search` grounding (for example through an Antigravity account). One block keeps `web-search.json` aligned with the connection, so every machine that installs this package is configured without manual editing:
+
+```yaml
+integrations:
+  piWebAccess:
+    connection: cpa-vps                 # key of an entry in `connections`
+    searchModel: gemini-3.8-flash-high  # a Gemini model ID exposed by CPA
+    defaultProvider: true               # optional: also set "provider": "gemini" (default false)
+```
+
+At startup the extension sets only these keys in `web-search.json`, found with the same rules as pi-web-access (`PI_CODING_AGENT_DIR`, XDG, legacy `~/.pi`, then `~/.pi/agent`): `geminiBaseUrl` (the connection origin), `geminiApiKey`, `searchModel` and, only with `defaultProvider: true`, `provider`. Other keys are preserved. The file is written only when a value differs; the previous content is kept as a private backup.
+
+- **No key is stored.** `geminiApiKey` becomes a reference that pi-web-access resolves itself: `$NAME` for an environment credential, `!cat -- '<path>'` for a file, `!security find-generic-password …` for the macOS Keychain. Paths are shell-quoted; control characters are refused.
+- **Never blocks startup.** A missing, non-JSON or unwritable file leaves it untouched and is reported by `/cpa-status` with a fixed code (`web_search_config_invalid`, `web_search_config_unreadable`). pi-web-access reads strict JSON only, so a file with comments is not modified.
+- **Effect.** pi-web-access caches its configuration per process: after the first write it applies from the next session (or `/reload`).
+- **Scope of `geminiBaseUrl`.** pi-web-access also uses it for URL context, YouTube and PDF/video analysis. Those features request Gemini models that CPA may not expose and fall back to the other tools when they fail; this was not exercised against a live CPA.
+- **`defaultProvider: true` removes failover.** Searches then use only CPA's Gemini; if it is unavailable the search fails instead of using another provider. The value of `provider` is managed: a different choice made later in pi-web-access is restored at the next start.
+- **Consumption.** Each search is one ordinary Gemini request on the upstream account selected by CPA. Provider terms for third-party use of that account remain your responsibility.
+- **Network.** `geminiBaseUrl` is the connection `endpoint`, so a loopback tunnel works only on the machine that runs it. Use an override for machines that reach CPA another way.
 
 ## Optional Manager Plus price administration
 
@@ -206,7 +229,7 @@ npm pack --dry-run
 
 Pi supplies host peers when loading managed packages. For local development, make installed host packages available via local links or dev tooling; never bundle them in the published package.
 
-The current suite has **152 passing tests** locally, including administrative conflict detection, lost acknowledgments, journal failures, rollback recovery and cancellation. The packed Pi probe also executes the real `read` tool, verifies streamed final text and resumes persisted tool/text history against a synthetic gateway. These tests do not establish deployed-CPA compatibility or compatibility with an arbitrary Manager version; optional Manager certification is not a core adapter release gate.
+The current suite has **216 passing tests** locally, including administrative conflict detection, lost acknowledgments, journal failures, rollback recovery and cancellation. The packed Pi probe also executes the real `read` tool, verifies streamed final text and resumes persisted tool/text history against a synthetic gateway. These tests do not establish deployed-CPA compatibility or compatibility with an arbitrary Manager version; optional Manager certification is not a core adapter release gate.
 
 Pi/update probes use isolated homes, synthetic credentials and a mock gateway; they never call a production model or alter global Pi settings. The optional server-profile probe downloads a checksum-verified native CLIProxyAPI v8.0.13 Darwin arm64 binary and exercises its HTTP API locally with synthetic OAuth auth, no completions. Other platforms may supply a binary explicitly; this is labeled separately, not automatically certified. They retain concise JSON evidence under `.artifacts/` (gitignored). The update probe exercises Git package updates through local repositories; it does **not** authenticate to a real private GitHub repository.
 
