@@ -165,13 +165,25 @@ const gatewaySpec = z.strictObject({
     if (profile.members.includes(id)) ctx.addIssue({ code: "custom", path: ["profiles", id], message: "profile_cycle" });
   }
 });
+const piWebAccessSpec = z.strictObject({
+  connection: z.string().regex(/^[a-z][a-z0-9-]*$/),
+  searchModel: identifier,
+  defaultProvider: z.boolean().default(false),
+});
 export const configurationSpec = z.strictObject({
   schemaVersion: z.literal(1),
   revision: label.optional(),
   connections: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), gatewaySpec),
+  integrations: z.strictObject({ piWebAccess: piWebAccessSpec.optional() }).optional(),
+}).superRefine((v, ctx) => {
+  const web = v.integrations?.piWebAccess;
+  if (web && !Object.hasOwn(v.connections, web.connection)) {
+    ctx.addIssue({ code: 'custom', path: ['integrations', 'piWebAccess', 'connection'], message: 'unknown_connection' });
+  }
 });
 export type Configuration = z.infer<typeof configurationSpec>;
 export type Gateway = Configuration["connections"][string];
+export type PiWebAccess = NonNullable<NonNullable<Configuration["integrations"]>["piWebAccess"]>;
 export type SecretReference = z.infer<typeof secretSpec>;
 export type ModelOverrides = z.infer<typeof modelSpec>;
 export type Price = z.infer<typeof priceSpec>;

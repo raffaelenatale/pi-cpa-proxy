@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { ProxyFault, readLayers, safeFailure, userConfigPath } from './configuration.ts';
 import { openGateway, type GatewayHealth } from './gateway.ts';
 import { runSetup } from './setup.ts';
+import { syncPiWebAccess } from './integrations.ts';
 import { runAdministration } from './admin-command.ts';
 import { runServerProfileCommand } from './profile-command.ts';
 import { profileMapRows, profileMapText, profileShortcuts, type ProfileMapRow } from './profile-map.ts';
@@ -15,6 +16,7 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
   const gateways: { id: string; health: GatewayHealth }[] = [];
   let startupError: string | undefined;
   let configured = false;
+  let webSearchStatus: string | undefined;
   const profileCommands: { suffix: string; connection: string; profile: string }[] = [];
   try {
     const layers = await readLayers(bundledPath, localPath);
@@ -33,6 +35,14 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
       } catch { /* Health retains a redacted code; no invented fallback models. */ }
       pi.registerProvider(opened.provider);
       gateways.push({ id, health: opened.health });
+    }
+    // Optional, local-only: point pi-web-access at CPA's Gemini endpoint. A failure never blocks startup or providers.
+    const web = layers.config?.integrations?.piWebAccess;
+    if (web && layers.config) {
+      try {
+        const outcome = await syncPiWebAccess(web, layers.config.connections[web.connection]);
+        webSearchStatus = outcome.status === 'unchanged' ? 'ok' : `${outcome.status} (effective from the next session; /reload may be needed)`;
+      } catch (error) { webSearchStatus = `error=${safeFailure(error)}`; }
     }
   } catch (error) { startupError = safeFailure(error); }
 
@@ -135,7 +145,8 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
     description: 'Show credential-free CPA catalogue/config health',
     handler: async (_args, ctx) => {
       const text = startupError ? `CPA startup: ${startupError}` : !configured ? 'CPA not configured. Use /cpa-setup.' :
-        gateways.map(({ id, health }) => `${id}: ${health.source}; omitted=${health.omitted}; missingProfiles=${health.missingProfiles}; error=${health.error ?? 'none'}; cache=${health.cacheError ?? 'ok'}`).join('\n') || 'CPA has no configured connections.';
+        [...gateways.map(({ id, health }) => `${id}: ${health.source}; omitted=${health.omitted}; missingProfiles=${health.missingProfiles}; error=${health.error ?? 'none'}; cache=${health.cacheError ?? 'ok'}`),
+          ...(webSearchStatus ? [`pi-web-access: ${webSearchStatus}`] : [])].join('\n') || 'CPA has no configured connections.';
       ctx.ui.notify(text, startupError ? 'error' : 'info');
     },
   });
