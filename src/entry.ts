@@ -9,6 +9,8 @@ import { syncPiWebAccess } from './integrations.ts';
 import { runAdministration } from './admin-command.ts';
 import { runServerProfileCommand } from './profile-command.ts';
 import { profileMapRows, profileMapText, profileShortcuts, type ProfileMapRow } from './profile-map.ts';
+import { DEFAULT_SEARCH_DESCRIPTION, runSearch, type SearchSource } from './search-tools.ts';
+import type { SearchTool } from './schema.ts';
 
 export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
   const bundledPath = fileURLToPath(new URL('../config.yaml', import.meta.url));
@@ -18,6 +20,7 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
   let configured = false;
   let webSearchStatus: string | undefined;
   const profileCommands: { suffix: string; connection: string; profile: string }[] = [];
+  const searchTools: [string, SearchTool][] = [];
   try {
     const layers = await readLayers(bundledPath, localPath);
     configured = !!layers.config;
@@ -44,7 +47,40 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
         webSearchStatus = outcome.status === 'unchanged' ? 'ok' : `${outcome.status} (effective from the next session; /reload may be needed)`;
       } catch (error) { webSearchStatus = `error=${safeFailure(error)}`; }
     }
+    searchTools.push(...Object.entries(layers.config?.integrations?.searchTools ?? {}));
   } catch (error) { startupError = safeFailure(error); }
+
+  // integrations.searchTools: model-callable search served by a connection model (e.g. a CPA alias that
+  // CPA forwards to a grounded upstream). Names and presence are fixed at startup; settings are re-read per call.
+  for (const [name, startupTool] of searchTools) {
+    try {
+      pi.registerTool(defineTool({
+        name,
+        label: startupTool.label ?? name,
+        description: startupTool.description ?? DEFAULT_SEARCH_DESCRIPTION,
+        promptSnippet: `${name}: ${startupTool.description ?? DEFAULT_SEARCH_DESCRIPTION}`,
+        parameters: Type.Object({
+          query: Type.String({ description: 'Question or search query, self-contained (include names, versions, dates).' }),
+          language: Type.Optional(Type.String({ description: 'Answer language, e.g. "Italian". Default: the language of the query.' })),
+        }),
+        async execute(_id, params, signal): Promise<{ content: { type: 'text'; text: string }[]; details: { model?: string; connection?: string; sources?: SearchSource[]; error?: string } }> {
+          try {
+            const layers = await readLayers(bundledPath, localPath);
+            const tool = layers.config?.integrations?.searchTools?.[name];
+            const gateway = tool && layers.config?.connections[tool.connection];
+            if (!tool || !gateway) throw new ProxyFault('search_tool_not_configured');
+            const answer = await runSearch(tool, gateway, params.query, { language: params.language, signal });
+            return {
+              content: [{ type: 'text' as const, text: `${answer.text}\n\n(${answer.sources.length} sources; model ${answer.model} via ${tool.connection})` }],
+              details: { model: answer.model, connection: tool.connection, sources: answer.sources },
+            };
+          } catch (error) {
+            return { content: [{ type: 'text' as const, text: `${name}: ${safeFailure(error)}` }], details: { error: safeFailure(error) } };
+          }
+        },
+      }));
+    } catch { /* name collision with another extension's tool: skip */ }
+  }
 
   // /<suffix> model shortcuts: profile-high -> /high selects profile-high for this session.
   for (const { suffix, connection, profile } of profileCommands) {
@@ -146,7 +182,8 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
     handler: async (_args, ctx) => {
       const text = startupError ? `CPA startup: ${startupError}` : !configured ? 'CPA not configured. Use /cpa-setup.' :
         [...gateways.map(({ id, health }) => `${id}: ${health.source}; omitted=${health.omitted}; missingProfiles=${health.missingProfiles}; error=${health.error ?? 'none'}; cache=${health.cacheError ?? 'ok'}`),
-          ...(webSearchStatus ? [`pi-web-access: ${webSearchStatus}`] : [])].join('\n') || 'CPA has no configured connections.';
+          ...(webSearchStatus ? [`pi-web-access: ${webSearchStatus}`] : []),
+          ...searchTools.map(([name, tool]) => `search tool ${name}: ${tool.connection}/${tool.model}`)].join('\n') || 'CPA has no configured connections.';
       ctx.ui.notify(text, startupError ? 'error' : 'info');
     },
   });

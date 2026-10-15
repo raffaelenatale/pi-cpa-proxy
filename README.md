@@ -20,6 +20,7 @@ This is a local **Pi → CPA adapter**, not a CPA administration suite. Configur
 - `/cpa-setup` connection wizard with explicit native protocol selection, advanced validated YAML editor and optional read-only client discovery check before saving. Setup writes only local configuration, never CPA or Pi defaults, and requires UI.
 - `/profile-map` prints a table of the configured role profiles (default model, fallback, context window, selectable effort levels, when to use). It reads only the local configuration: the first member is the default, `fallback` (or the second member) the fallback, `description` the "when to use" text; no server request is made.
 - Optional `integrations.piWebAccess`: keeps pi-web-access' `web-search.json` pointed at CPA's Gemini search without storing the key (see below).
+- Optional `integrations.searchTools`: model-callable search tools, each served by one model of a connection (see below).
 - `/cpa-status`, `/cpa-refresh-models` and optional `/cpa-admin` for Manager Plus price status, preview, approved apply and latest-transaction rollback.
 - `/cpa-server-profiles` for separately configured OAuth alias/context publication, ownership checks and latest rollback; single-alias behavior verified against an isolated native CLIProxyAPI v8.0.13 release. `compatibleGroups` adds alias/context rows on existing OAuth channels, not provider priorities or failover-order configuration.
 - Private distribution assembler, without a second copy of the source implementation.
@@ -112,6 +113,26 @@ At startup the extension sets only these keys in `web-search.json`, found with t
 - **`defaultProvider: true` removes failover.** Searches then use only CPA's Gemini; if it is unavailable the search fails instead of using another provider. The value of `provider` is managed: a different choice made later in pi-web-access is restored at the next start.
 - **Consumption.** Each search is one ordinary Gemini request on the upstream account selected by CPA. Provider terms for third-party use of that account remain your responsibility.
 - **Network.** `geminiBaseUrl` is the connection `endpoint`, so a loopback tunnel works only on the machine that runs it. Use an override for machines that reach CPA another way.
+
+### Search tools served by a connection model
+
+`integrations.searchTools` registers one model-callable tool per entry. The tool sends a single non-streaming Chat Completions request (`POST <endpoint>/v1/chat/completions`) to the named connection with the configured model, asks for an answer with Markdown source links, and returns the text plus the extracted sources. Routing stays in CPA: the model is typically a CPA alias whose upstream does web grounding, so the client only needs its existing CPA endpoint and credential.
+
+```yaml
+integrations:
+  searchTools:
+    grounded_search:                    # tool name: [a-z][a-z0-9_]{2,63}, not a built-in or pi-web-access name
+      connection: cpa-vps               # key of an entry in `connections`
+      model: example-grounded-model     # model/alias exposed by CPA
+      label: Grounded search            # optional
+      description: Search the web with a grounded model and return a sourced answer.  # optional, shown to the model
+      timeoutMs: 180000                 # optional, default 180000
+```
+
+- Tool names and presence are fixed at startup (`/reload` after editing); connection, model and timeout are re-read on each call.
+- Errors are fixed codes (`search_http_<status>`, `search_timeout`, `search_response_empty`, `credential_missing`, …); upstream bodies are never shown. Redirects are refused and responses are capped at 4 MB.
+- The model is not hidden automatically. Add it to the connection's `hidden` list if it should not be selectable as a chat model.
+- `/cpa-status` lists the registered search tools.
 
 ## Optional Manager Plus price administration
 

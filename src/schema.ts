@@ -170,20 +170,42 @@ const piWebAccessSpec = z.strictObject({
   searchModel: identifier,
   defaultProvider: z.boolean().default(false),
 });
+// A model-callable search tool served by one model of a connection (for example a CPA alias routed to a
+// grounded upstream). The record key is the tool name.
+const searchToolSpec = z.strictObject({
+  connection: z.string().regex(/^[a-z][a-z0-9-]*$/),
+  model: identifier,
+  label: label.optional(),
+  description: z.string().min(1).max(1200).refine((s) => !/[\r\n\u0000]/.test(s)).optional(),
+  timeoutMs: z.number().int().min(1000).max(600_000).default(180_000),
+});
+export const reservedToolNames = ['cpa_profile_map', 'web_search', 'fetch_content', 'get_search_content', 'source_check', 'google_search', 'read', 'bash', 'edit', 'write'];
 export const configurationSpec = z.strictObject({
   schemaVersion: z.literal(1),
   revision: label.optional(),
   connections: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), gatewaySpec),
-  integrations: z.strictObject({ piWebAccess: piWebAccessSpec.optional() }).optional(),
+  integrations: z.strictObject({
+    piWebAccess: piWebAccessSpec.optional(),
+    searchTools: z.record(z.string().regex(/^[a-z][a-z0-9_]{2,63}$/), searchToolSpec).optional(),
+  }).optional(),
 }).superRefine((v, ctx) => {
   const web = v.integrations?.piWebAccess;
   if (web && !Object.hasOwn(v.connections, web.connection)) {
     ctx.addIssue({ code: 'custom', path: ['integrations', 'piWebAccess', 'connection'], message: 'unknown_connection' });
   }
+  for (const [name, tool] of Object.entries(v.integrations?.searchTools ?? {})) {
+    if (!Object.hasOwn(v.connections, tool.connection)) {
+      ctx.addIssue({ code: 'custom', path: ['integrations', 'searchTools', name, 'connection'], message: 'unknown_connection' });
+    }
+    if (reservedToolNames.includes(name)) {
+      ctx.addIssue({ code: 'custom', path: ['integrations', 'searchTools', name], message: 'reserved_tool_name' });
+    }
+  }
 });
 export type Configuration = z.infer<typeof configurationSpec>;
 export type Gateway = Configuration["connections"][string];
 export type PiWebAccess = NonNullable<NonNullable<Configuration["integrations"]>["piWebAccess"]>;
+export type SearchTool = z.infer<typeof searchToolSpec>;
 export type SecretReference = z.infer<typeof secretSpec>;
 export type ModelOverrides = z.infer<typeof modelSpec>;
 export type Price = z.infer<typeof priceSpec>;

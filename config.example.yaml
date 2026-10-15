@@ -33,3 +33,10 @@ connections:
         metadata:
           api: openai-completions
           compat: { supportsDeveloperRole: false, supportsStore: false }
+# Optional: model-callable search tool served by a CPA model/alias with web grounding.
+# integrations:
+#   searchTools:
+#     grounded_search:
+#       connection: cpa-proxy
+#       model: example-grounded-model
+#       description: Search the web with a grounded model and return a sourced answer.
