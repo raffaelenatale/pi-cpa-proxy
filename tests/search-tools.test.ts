@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { validateConfiguration } from '../src/configuration.ts';
-import { extractSources, runSearch, searchPrompt } from '../src/search-tools.ts';
+import { extractSources, rawPrompt, runSearch, searchPrompt } from '../src/search-tools.ts';
 import { makeGateway } from './fixtures.ts';
 
 const withTools = (tools: unknown) => ({ schemaVersion: 1, connections: { 'test-proxy': makeGateway() }, integrations: { searchTools: tools } });
-const tool = { connection: 'test-proxy', model: 'grounded-model', timeoutMs: 5000 };
+const tool = { connection: 'test-proxy', model: 'grounded-model', timeoutMs: 5000, stream: false, prompt: 'search' as const };
 
 test('schema accepts a search tool and applies the default timeout', () => {
   const parsed = validateConfiguration(withTools({ argon_search: { connection: 'test-proxy', model: 'grounded-model' } }));
-  assert.deepEqual(parsed.integrations?.searchTools?.argon_search, { connection: 'test-proxy', model: 'grounded-model', timeoutMs: 180000 });
+  assert.deepEqual(parsed.integrations?.searchTools?.argon_search, { connection: 'test-proxy', model: 'grounded-model', timeoutMs: 180000, stream: false, prompt: 'search' });
 });
 test('schema rejects unknown connection, reserved or malformed names and extra keys', () => {
   assert.throws(() => validateConfiguration(withTools({ argon_search: { connection: 'missing', model: 'm' } })));
@@ -32,7 +32,7 @@ test('sources: markdown links and bare URLs, deduplicated, http(s) only', () => 
   ]);
 });
 
-async function serve(handler: (body: string, headers: Record<string, string | string[] | undefined>) => { status: number; body: string; delayMs?: number }) {
+async function serve(handler: (body: string, headers: Record<string, string | string[] | undefined>) => { status: number; body: string; delayMs?: number; type?: string }) {
   const seen: { body: string; auth?: string; url?: string }[] = [];
   const server = createServer((req, res) => {
     let body = '';
@@ -40,7 +40,7 @@ async function serve(handler: (body: string, headers: Record<string, string | st
     req.on('end', () => {
       seen.push({ body, auth: req.headers.authorization, url: req.url });
       const out = handler(body, req.headers);
-      setTimeout(() => { res.writeHead(out.status, { 'content-type': 'application/json' }); res.end(out.body); }, out.delayMs ?? 0);
+      setTimeout(() => { res.writeHead(out.status, { 'content-type': out.type ?? 'application/json' }); res.end(out.body); }, out.delayMs ?? 0);
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -84,4 +84,38 @@ test('runSearch times out and reports a missing credential', async () => {
     delete process.env.CPA_TEST_KEY;
     await assert.rejects(() => runSearch(tool, srv.gateway, 'q'), /credential_missing/);
   } finally { await srv.close(); }
+});
+
+const sse = (...events: unknown[]) => events.map((e) => `data: ${typeof e === 'string' ? e : JSON.stringify(e)}\n\n`).join('');
+
+test('stream: content is accumulated, reasoning is reported as progress, raw prompt is sent as is', async () => {
+  process.env.CPA_TEST_KEY = 'K-123';
+  const body = sse(
+    { model: 'deep-x', choices: [{ delta: { role: 'assistant' } }] },
+    { choices: [{ delta: { reasoning_content: 'Plan: a, b\n' } }] },
+    { choices: [{ delta: { reasoning_content: 'Researching... 1 min\n' } }] },
+    { choices: [{ delta: { content: '# Report\nSee [S](https://s.example/1)' } }] },
+    { choices: [{ delta: { content: ' end.' } }] },
+    '[DONE]');
+  const srv = await serve(() => ({ status: 200, body, type: 'text/event-stream' }));
+  const progress: string[] = [];
+  try {
+    const result = await runSearch({ ...tool, stream: true, prompt: 'raw' }, srv.gateway, 'deep topic', { language: 'Italian', onProgress: (t) => progress.push(t) });
+    assert.equal(result.text, '# Report\nSee [S](https://s.example/1) end.');
+    assert.equal(result.model, 'deep-x');
+    assert.deepEqual(progress, ['Plan: a, b\n', 'Researching... 1 min\n']);
+    const sent = JSON.parse(srv.seen[0].body);
+    assert.equal(sent.stream, true);
+    assert.equal(sent.messages[0].content, rawPrompt('deep topic', 'Italian'));
+  } finally { await srv.close(); }
+});
+
+test('stream: an error event becomes a fixed code', async () => {
+  process.env.CPA_TEST_KEY = 'K-123';
+  const srv = await serve(() => ({ status: 200, type: 'text/event-stream', body: sse({ error: { message: 'secret', type: 'deep_research_busy' } }, '[DONE]') }));
+  const srv2 = await serve(() => ({ status: 200, type: 'text/event-stream', body: sse({ error: { type: 'Bad Type!' } }) }));
+  try {
+    await assert.rejects(() => runSearch({ ...tool, stream: true }, srv.gateway, 'q'), (e: Error) => e.message === 'search_stream_deep_research_busy');
+    await assert.rejects(() => runSearch({ ...tool, stream: true }, srv2.gateway, 'q'), (e: Error) => e.message === 'search_stream_upstream_error');
+  } finally { await srv.close(); await srv2.close(); }
 });

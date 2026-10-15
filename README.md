@@ -126,8 +126,12 @@ integrations:
       model: example-grounded-model     # model/alias exposed by CPA
       label: Grounded search            # optional
       description: Search the web with a grounded model and return a sourced answer.  # optional, shown to the model
-      timeoutMs: 180000                 # optional, default 180000
+      timeoutMs: 180000                 # optional, default 180000, max 7200000
+      stream: false                     # optional: SSE request; reasoning_content deltas become tool progress
+      prompt: search                    # optional: search (wrap with search/citation instructions) | raw (send the query as is)
 ```
+
+For long agentic jobs (for example a Deep Research model) use `stream: true`, `prompt: raw` and a long `timeoutMs`: the plan and status lines that the upstream sends as `reasoning_content` are shown as live tool progress, and the final `content` is the result. An error event inside the stream becomes `search_stream_<type>`.
 
 - Tool names and presence are fixed at startup (`/reload` after editing); connection, model and timeout are re-read on each call.
 - Errors are fixed codes (`search_http_<status>`, `search_timeout`, `search_response_empty`, `credential_missing`, …); upstream bodies are never shown. Redirects are refused and responses are capped at 4 MB.

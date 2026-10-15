@@ -177,7 +177,11 @@ const searchToolSpec = z.strictObject({
   model: identifier,
   label: label.optional(),
   description: z.string().min(1).max(1200).refine((s) => !/[\r\n\u0000]/.test(s)).optional(),
-  timeoutMs: z.number().int().min(1000).max(600_000).default(180_000),
+  timeoutMs: z.number().int().min(1000).max(7_200_000).default(180_000),
+  // stream: SSE request; `reasoning_content` deltas are shown as tool progress (long jobs such as Deep Research).
+  stream: z.boolean().default(false),
+  // search: wrap the query with "search the web + cite sources" instructions; raw: send the query as is.
+  prompt: z.enum(['search', 'raw']).default('search'),
 });
 export const reservedToolNames = ['cpa_profile_map', 'web_search', 'fetch_content', 'get_search_content', 'source_check', 'google_search', 'read', 'bash', 'edit', 'write'];
 export const configurationSpec = z.strictObject({
