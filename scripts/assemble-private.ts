@@ -3,6 +3,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { decodeYaml, validateConfiguration, safeFailure, ProxyFault } from '../src/configuration.ts';
+import { buildOmpEntry } from './build-omp.ts';
 
 export async function assemblePrivate(configPath: string, destination: string, name = 'pi-cpa-proxy-personal', sourceRoot = fileURLToPath(new URL('..', import.meta.url))): Promise<void> {
   if (!/^(@[a-z0-9-]+\/)?[a-z0-9-]+$/.test(name) || name === 'pi-cpa-proxy') throw new ProxyFault('private_package_name_invalid');
@@ -17,7 +18,15 @@ export async function assemblePrivate(configPath: string, destination: string, n
   await cp(join(sourceRoot, 'README.md'), join(destination, 'README.md'));
   const { devDependencies: _dev, scripts: _scripts, repository: _repository, ...manifest } = source;
   await writeFile(join(destination, 'package.json'), JSON.stringify({ ...manifest, name, private: true,
-    files: ['src', 'config.yaml', 'provenance.json', 'README.md', 'LICENSE'],
+    omp: { extensions: ['./dist/omp-entry.js'] },
+    files: ['src', 'dist', '.omp-plugin', 'config.yaml', 'provenance.json', 'README.md', 'LICENSE'],
+  }, null, 2) + '\n');
+  // omp installs this repository as a one-plugin marketplace; `omp plugin upgrade` follows the catalog version.
+  await buildOmpEntry(sourceRoot, join(destination, 'dist', 'omp-entry.js'));
+  await mkdir(join(destination, '.omp-plugin'));
+  await writeFile(join(destination, '.omp-plugin', 'marketplace.json'), JSON.stringify({
+    name, owner: { name: 'raffaelenatale' },
+    plugins: [{ name, description: 'CLIProxyAPI connections as omp providers', version: source.version, source: './' }],
   }, null, 2) + '\n');
   await writeFile(join(destination, 'config.yaml'), config, { mode: 0o600 });
   await writeFile(join(destination, 'provenance.json'), JSON.stringify({

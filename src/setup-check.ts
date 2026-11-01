@@ -1,7 +1,7 @@
 import { deriveCatalogue } from './catalogue.ts';
 import { ProxyFault, safeFailure } from './configuration.ts';
 import { resolveSecret } from './credentials.ts';
-import { requestListing } from './gateway.ts';
+import { requestListing } from './listing.ts';
 import type { Gateway } from './schema.ts';
 
 export type SetupCheck =

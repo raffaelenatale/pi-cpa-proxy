@@ -1,21 +1,27 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { getBuiltinModels, getBuiltinProviders } from "@earendil-works/pi-ai/providers/all";
+// Pi ships its bundled catalogue under this subpath; omp has no such subpath and passes its own SeedLookup.
+const piCatalogue = await import("@earendil-works/pi-ai/providers/all").catch(() => undefined);
 import { effortLevels, type Gateway, type ModelOverrides, type Price, type WireApi } from "./schema.ts";
 import { ProxyFault } from "./configuration.ts";
 
 export interface ListingEntry { id: string; }
 export interface CatalogueOutcome { models: Model<Api>[]; omitted: number; missingProfiles: number; }
 export type SeedLookup = (id: string, source?: ModelOverrides["source"]) => Model<Api> | undefined;
-let builtinEntries: Model<Api>[] | undefined;
-export const lookupBuiltin: SeedLookup = (id, source) => {
-  builtinEntries ??= getBuiltinProviders().flatMap((provider) => getBuiltinModels(provider)) as Model<Api>[];
-  const choices = builtinEntries.filter((entry) => source ? entry.provider === source.provider && entry.id === source.id : entry.id === id);
-  // Multiple providers can give the same ID materially different limits/costs. No arbitrary first match.
-  if (choices.length === 1) return choices[0];
-  if (!choices.length) return undefined;
-  const signature = (entry: Model<Api>) => JSON.stringify([entry.contextWindow, entry.maxTokens, entry.input, entry.reasoning, entry.cost, entry.thinkingLevelMap, entry.compat]);
-  return choices.every((entry) => signature(entry) === signature(choices[0])) ? choices[0] : undefined;
-};
+/** Lookup over a lazily loaded list of reference models; ambiguous ids (different limits per provider) yield nothing. */
+export function seedLookupFrom(load: () => Model<Api>[]): SeedLookup {
+  let entries: Model<Api>[] | undefined;
+  return (id, source) => {
+    entries ??= load();
+    const choices = entries.filter((entry) => source ? entry.provider === source.provider && entry.id === source.id : entry.id === id);
+    // Multiple providers can give the same ID materially different limits/costs. No arbitrary first match.
+    if (choices.length === 1) return choices[0];
+    if (!choices.length) return undefined;
+    const signature = (entry: Model<Api>) => JSON.stringify([entry.contextWindow, entry.maxTokens, entry.input, entry.reasoning, entry.cost, entry.thinkingLevelMap, entry.compat]);
+    return choices.every((entry) => signature(entry) === signature(choices[0])) ? choices[0] : undefined;
+  };
+}
+export const lookupBuiltin: SeedLookup = seedLookupFrom(() =>
+  piCatalogue ? piCatalogue.getBuiltinProviders().flatMap((provider) => piCatalogue.getBuiltinModels(provider)) as Model<Api>[] : []);
 export function entranceUrl(origin: string, api: WireApi): string {
   return origin.replace(/\/$/, '') + (api === "anthropic-messages" ? '' : api === "google-generative-ai" ? '/v1beta' : '/v1');
 }

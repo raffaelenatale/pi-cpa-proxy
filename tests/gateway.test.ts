@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createModels, Type } from '@earendil-works/pi-ai';
 import { makeGateway } from './fixtures.ts';
-import { openGateway, requestListing } from '../src/gateway.ts';
+import { openGateway } from '../src/gateway.ts';
+import { requestListing } from '../src/listing.ts';
 
 async function mockGateway() {
   let fail = 0, requests = 0;
