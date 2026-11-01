@@ -264,6 +264,17 @@ Configuration is trusted local data, not a sandbox. No arbitrary shell commands 
 
 The extension retains no transcript or credential in its catalogue cache. Cache contains model IDs and can still be private metadata. Cache/journal pruning and richer provenance UI are pending. Price-table and narrow OAuth alias rollback are available; compatible-provider routing rollback is not yet implemented.
 
+## omp (oh-my-pi) without Pi
+
+omp discovers gateway models from `/v1/models`, which carries no limits, and assumes 128k/32k for unknown ids. `src/omp-cli.ts` materialises the enriched catalogue (bundled seeds, config overrides, profile derivation) into omp's `models.yml` and needs no Pi runtime, only `yaml`, `zod` and `@earendil-works/pi-ai`:
+
+```sh
+node --experimental-strip-types src/omp-cli.ts                 # preview on stdout
+node --experimental-strip-types src/omp-cli.ts --write         # replace <agent-dir>/models.yml
+```
+
+Options: `--connection ID` (needed with several connections), `--agent-dir DIR` (default `$OMP_AGENT_DIR`, `$PI_CODING_AGENT_DIR`, then `~/.omp/agent`), `--bundled FILE` / `--local FILE` (config layers, default the bundle's `config.yaml` and the user config), `--force` (overwrite a `models.yml` this tool did not generate). The previous file is kept as `models.yml.backup-*`. Credentials are written as references (`!cat <file>`, env var name, keychain command), never as values. When the gateway is down the last cached listing is used. Restart omp or run `omp models refresh` afterwards.
+
 ## License
 
 MIT. Features may be inspired by public behavior in the CLIProxyAPI ecosystem; implementation and tests are independently authored. See `docs/feature-research.md` in the source repository for the bounded discovery notes.
