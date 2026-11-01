@@ -266,18 +266,9 @@ The extension retains no transcript or credential in its catalogue cache. Cache 
 
 ## omp (oh-my-pi) without Pi
 
-omp discovers gateway models from `/v1/models`, which carries no limits, and assumes 128k/32k for unknown ids. `src/omp-cli.ts` materialises the enriched catalogue (bundled seeds, config overrides, profile derivation) into omp's `models.yml` and needs no Pi runtime, only `yaml`, `zod` and `@earendil-works/pi-ai`:
+omp discovers gateway models from `/v1/models`, which carries no limits, and assumes 128k/32k for unknown ids. The private bundle (`npm run bundle:private`) therefore ships an omp extension, `dist/omp-entry.js`, and a one-plugin marketplace catalog (`.omp-plugin/marketplace.json`). The extension registers every connection as an omp provider with the enriched catalogue (bundled seeds, config overrides, profile derivation), read live from `/v1/models` at every omp start. The last listing is cached under `<agent-dir>/pi-cpa-proxy/cache` as fallback; a gateway that is down with no cache registers nothing and omp keeps working. Credentials are passed as references (`!cat <file>`, env var name, keychain command), never as values.
 
-```sh
-node --experimental-strip-types src/omp-cli.ts                 # preview on stdout
-node --experimental-strip-types src/omp-cli.ts --write         # replace <agent-dir>/models.yml
-```
-
-Options: `--connection ID` (needed with several connections), `--agent-dir DIR` (default `$OMP_AGENT_DIR`, `$PI_CODING_AGENT_DIR`, then `~/.omp/agent`), `--bundled FILE` / `--local FILE` (config layers, default the bundle's `config.yaml` and the user config), `--force` (overwrite a `models.yml` this tool did not generate). The previous file is kept as `models.yml.backup-*`. Credentials are written as references (`!cat <file>`, env var name, keychain command), never as values. When the gateway is down the last cached listing is used. Restart omp or run `omp models refresh` afterwards.
-
-### omp extension (recommended)
-
-The private bundle (`npm run bundle:private`) also ships `dist/omp-entry.js` and a one-plugin marketplace catalog (`.omp-plugin/marketplace.json`). The extension registers every connection as an omp provider with the same enriched catalogue, read live from `/v1/models` at every omp start (last listing cached under `<agent-dir>/pi-cpa-proxy/cache` as fallback; a gateway that is down with no cache registers nothing and omp keeps working). No `models.yml` and no `node_modules`: the build (`npm run build:omp`, esbuild) inlines `yaml` and `zod`, and the bundled-model reference comes from omp's own catalogue, so prices and limits of ids that only the bundled catalogue knows follow omp's data, not Pi's.
+No `models.yml` and no `node_modules`: the build (`npm run build:omp`, esbuild) inlines `yaml` and `zod`, and the bundled-model reference comes from omp's own catalogue, so prices and limits of ids that only the bundled catalogue knows follow omp's data, not Pi's.
 
 ```sh
 omp plugin marketplace add raffaelenatale/pi-cpa-proxy-personal
@@ -285,7 +276,7 @@ omp plugin install pi-cpa-proxy-personal@pi-cpa-proxy-personal
 omp plugin upgrade            # after a new release (or: omp update --plugins)
 ```
 
-Remove the generated `models.yml` (or its `cpa-vps` provider) first: both would define the same provider. `omp-cli.ts` stays for one release as the fallback and goes away once the extension is rolled out.
+Remove a previously generated `models.yml` (or its `cpa-vps` provider) first: both would define the same provider.
 
 ## License
 

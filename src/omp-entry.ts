@@ -9,7 +9,7 @@ import { catalogueFor, ompApiKey, ompModelEntry } from './omp-export.ts';
 
 /**
  * omp extension: registers every configured connection as an omp provider with the enriched
- * catalogue (same rows the generated models.yml used to hold), read live from the gateway at startup
+ * catalogue, read live from the gateway at startup
  * with the last listing as fallback. Built into dist/omp-entry.js (one file, dependencies inlined)
  * because omp's extension host resolves neither `yaml` nor pi-ai's `providers/all` subpath.
  */

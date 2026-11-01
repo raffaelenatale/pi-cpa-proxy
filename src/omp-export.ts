@@ -1,7 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { stringify } from 'yaml';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { deriveCatalogue, type ListingEntry, type SeedLookup } from './catalogue.ts';
 import { ProxyFault, expandUserPath } from './configuration.ts';
@@ -9,14 +8,12 @@ import { requestListing } from './listing.ts';
 import { resolveSecret } from './credentials.ts';
 import type { Gateway, SecretReference } from './schema.ts';
 
-export const OMP_MANAGED_MARKER = 'managed-by: pi-cpa-proxy';
-
 /**
  * omp (oh-my-pi) discovers gateway models via GET /v1/models, which carries no limits, and then
- * assumes generic 128k/32k defaults for unknown ids. Explicit `models:` entries in models.yml win
- * over discovery, so the enriched catalogue (bundled seeds + config overrides + profile derivation)
- * is materialised into the omp configuration. The credential is referenced, never copied:
- * file -> omp command-resolved secret (`!cat`), env -> variable name, keychain -> `!security`.
+ * assumes generic 128k/32k defaults for unknown ids. The omp extension therefore registers the
+ * enriched catalogue (bundled seeds + config overrides + profile derivation) explicitly. The
+ * credential is referenced, never copied: file -> omp command-resolved secret (`!cat`),
+ * env -> variable name, keychain -> `!security`.
  * No Pi runtime is needed: this module only uses the engine's catalogue and the pi-ai model types.
  */
 export function ompApiKey(credential: SecretReference): string {
@@ -25,6 +22,8 @@ export function ompApiKey(credential: SecretReference): string {
   return `!security find-generic-password -a ${credential.account} -s ${credential.service} -w`;
 }
 
+// Per-model `api` + `baseUrl`: omp appends only the path suffix to baseUrl, so the OpenAI surface
+// needs `/v1` and the Anthropic one must not have it (both come from the derived model).
 export function ompModelEntry(model: Model<Api>): Record<string, unknown> {
   const entry: Record<string, unknown> = {
     id: model.id, name: model.name ?? model.id, api: model.api, baseUrl: model.baseUrl,
@@ -42,19 +41,6 @@ export function ompModelEntry(model: Model<Api>): Record<string, unknown> {
     };
   }
   return entry;
-}
-
-export function ompModelsYml(id: string, gateway: Gateway, models: Model<Api>[]): string {
-  const provider: Record<string, unknown> = {
-    baseUrl: gateway.endpoint.replace(/\/$/, ''),
-    apiKey: ompApiKey(gateway.credential),
-    api: gateway.api,
-    models: models.map(ompModelEntry),
-  };
-  // Per-model `api` + `baseUrl`: omp appends only the path suffix to baseUrl, so the OpenAI surface
-  // needs `/v1` and the Anthropic one must not have it (both come from the derived model).
-  const header = `# ${OMP_MANAGED_MARKER} connection ${id}. Regenerate with: node --experimental-strip-types src/omp-cli.ts --write. Do not hand-edit limits; fix config.yaml instead.`;
-  return `${header}\n${stringify({ providers: { [id]: provider } })}`;
 }
 
 /** Live catalogue; falls back to the last cached listing when the gateway is unreachable. A live listing refreshes the cache. */
