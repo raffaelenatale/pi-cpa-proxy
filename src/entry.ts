@@ -9,7 +9,7 @@ import { syncPiWebAccess } from './integrations.ts';
 import { runAdministration } from './admin-command.ts';
 import { runServerProfileCommand } from './profile-command.ts';
 import { profileMapRows, profileMapText, profileShortcuts, type ProfileMapRow } from './profile-map.ts';
-import { DEFAULT_SEARCH_DESCRIPTION, runSearch, type SearchSource } from './search-tools.ts';
+import { searchToolDefinition } from './search-registration.ts';
 import type { SearchTool } from './schema.ts';
 
 export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
@@ -54,36 +54,7 @@ export default async function attachProxy(pi: ExtensionAPI): Promise<void> {
   // CPA forwards to a grounded upstream). Names and presence are fixed at startup; settings are re-read per call.
   for (const [name, startupTool] of searchTools) {
     try {
-      pi.registerTool(defineTool({
-        name,
-        label: startupTool.label ?? name,
-        description: startupTool.description ?? DEFAULT_SEARCH_DESCRIPTION,
-        promptSnippet: `${name}: ${startupTool.description ?? DEFAULT_SEARCH_DESCRIPTION}`,
-        parameters: Type.Object({
-          query: Type.String({ description: 'Question or search query, self-contained (include names, versions, dates).' }),
-          language: Type.Optional(Type.String({ description: 'Answer language, e.g. "Italian". Default: the language of the query.' })),
-        }),
-        async execute(_id, params, signal, onUpdate): Promise<{ content: { type: 'text'; text: string }[]; details: { model?: string; connection?: string; sources?: SearchSource[]; error?: string } }> {
-          try {
-            const layers = await readLayers(bundledPath, localPath);
-            const tool = layers.config?.integrations?.searchTools?.[name];
-            const gateway = tool && layers.config?.connections[tool.connection];
-            if (!tool || !gateway) throw new ProxyFault('search_tool_not_configured');
-            let progress = '';
-            const onProgress = (text: string) => {
-              progress = (progress + text).slice(-4000);
-              onUpdate?.({ content: [{ type: 'text' as const, text: progress }], details: { connection: tool.connection } });
-            };
-            const answer = await runSearch(tool, gateway, params.query, { language: params.language, signal, onProgress });
-            return {
-              content: [{ type: 'text' as const, text: `${answer.text}\n\n(${answer.sources.length} sources; model ${answer.model} via ${tool.connection})` }],
-              details: { model: answer.model, connection: tool.connection, sources: answer.sources },
-            };
-          } catch (error) {
-            return { content: [{ type: 'text' as const, text: `${name}: ${safeFailure(error)}` }], details: { error: safeFailure(error) } };
-          }
-        },
-      }));
+      pi.registerTool(defineTool(searchToolDefinition(name, startupTool, Type, { bundled: bundledPath, local: localPath })));
     } catch { /* name collision with another extension's tool: skip */ }
   }
 

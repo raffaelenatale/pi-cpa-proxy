@@ -278,6 +278,14 @@ omp plugin upgrade            # after a new release (or: omp update --plugins)
 
 Remove a previously generated `models.yml` (or its `cpa-vps` provider) first: both would define the same provider.
 
+### Web search in omp
+
+omp has its own `web_search` tool and no pi-web-access, so the two integrations map as follows:
+
+- `integrations.piWebAccess` registers a second provider, `<connection>-gemini` (for example `cpa-vps-gemini`), with the `searchModel` served through `google-generative-ai` at `<endpoint>/v1beta`. omp runs Google Search grounding for its `web` model role only through that protocol; CPA serves it natively. If `searchModel` is not in the catalogue, no provider is registered and the startup log says so. `defaultProvider` has no meaning in omp.
+- The provider is only a candidate. Select it once per machine in omp's `config.yml`: `modelRoles: { web: cpa-vps-gemini/<searchModel> }`. `retry.fallbackChains.web` left unset keeps omp's built-in engines as fallback; slow model-backed search may need `omp config set providers.webSearchTimeoutSeconds 120`.
+- `integrations.searchTools` become omp tools with the same definition as in Pi (`search-registration.ts`), registered with `approval: read`. omp lists extension tools as discoverable: the model reaches them through `xd://<tool>`.
+
 ## License
 
 MIT. Features may be inspired by public behavior in the CLIProxyAPI ecosystem; implementation and tests are independently authored. See `docs/feature-research.md` in the source repository for the bounded discovery notes.

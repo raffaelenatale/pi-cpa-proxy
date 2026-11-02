@@ -43,6 +43,20 @@ export function ompModelEntry(model: Model<Api>): Record<string, unknown> {
   return entry;
 }
 
+/**
+ * omp runs Gemini Google-Search grounding for its `web` role only through a `google-generative-ai` model
+ * (it POSTs `<baseUrl>/models/<id>:streamGenerateContent`). CPA serves that protocol under `/v1beta`, so the
+ * `integrations.piWebAccess.searchModel` is registered as a second provider next to the chat one:
+ * `<connection>-gemini/<searchModel>`, to be named in omp's `modelRoles.web`. Undefined when the model is not in the catalogue.
+ */
+export function ompSearchProvider(id: string, gateway: Gateway, models: Model<Api>[], searchModel: string): { name: string; config: Record<string, unknown> } | undefined {
+  const model = models.find((candidate) => candidate.id === searchModel);
+  if (!model) return undefined;
+  const baseUrl = `${gateway.endpoint.replace(/\/+$/, '')}/v1beta`;
+  const entry = { ...ompModelEntry(model), name: `${model.name ?? model.id} (web search)`, api: 'google-generative-ai', baseUrl };
+  return { name: `${id}-gemini`, config: { baseUrl, apiKey: ompApiKey(gateway.credential), api: 'google-generative-ai', models: [entry] } };
+}
+
 /** Live catalogue; falls back to the last cached listing when the gateway is unreachable. A live listing refreshes the cache. */
 export async function catalogueFor(id: string, gateway: Gateway, cacheDirectory: string, lookup?: SeedLookup): Promise<Model<Api>[]> {
   const identity = createHash('sha256').update(JSON.stringify(gateway)).digest('hex');
