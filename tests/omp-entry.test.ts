@@ -61,7 +61,7 @@ test('registers the configured connection with enriched models; ids without meta
       assert.equal(provider.apiKey, 'CPA_TEST_KEY');
       const models = provider.models as { id: string; contextWindow: number; maxTokens: number }[];
       assert.deepEqual(models.map((model) => [model.id, model.contextWindow, model.maxTokens]), [['primary', 200000, 64000]]);
-      assert.deepEqual(tools, []);
+      assert.deepEqual(tools.map((tool) => tool.name), ['cpa_profile_map']);
     });
   } finally { server.close(); }
 });
@@ -81,7 +81,7 @@ test('a gateway that is down with no cache registers nothing and does not throw'
   const { server, port } = await startGateway();
   server.close();
   await withConfiguration(port, '', async (_directory, register) => {
-    assert.deepEqual(await register(), { providers: [], tools: [] });
+    assert.deepEqual((await register()).providers, []);
   });
 });
 
@@ -114,7 +114,7 @@ test('a search model missing from the catalogue registers no grounding provider 
     await withConfiguration(port, webIntegrations('unconfigured'), async (_directory, register) => {
       const { providers, tools } = await register();
       assert.deepEqual(providers.map(([name]) => name), ['test-proxy']);
-      assert.equal(tools.length, 1);
+      assert.deepEqual(tools.map((tool) => tool.name), ['cpa_profile_map', 'grounded_search']);
       assert.match(String(errors.mock.calls[0].arguments[0]), /unconfigured is not in the test-proxy catalogue/);
     });
   } finally { server.close(); }
@@ -124,7 +124,7 @@ test('searchTools are registered read-only and answer through the connection wit
   const { server, port } = await startGateway();
   try {
     await withConfiguration(port, webIntegrations('primary'), async (_directory, register) => {
-      const { tools: [tool] } = await register();
+      const tool = (await register()).tools.find((candidate) => candidate.name === 'grounded_search')!;
       assert.equal(tool.name, 'grounded_search');
       assert.equal(tool.approval, 'read');
       const execute = tool.execute as (id: string, params: { query: string }, signal: undefined, onUpdate: undefined) => Promise<{ content: { text: string }[]; details: { sources?: { url: string }[]; error?: string } }>;
@@ -134,4 +134,22 @@ test('searchTools are registered read-only and answer through the connection wit
       assert.deepEqual(result.details.sources?.map((source) => source.url), ['https://bun.example/blog']);
     });
   } finally { server.close(); }
+});
+
+test('cpa_profile_map is a read-only tool that lists the configured profiles, even when the gateway is down', async () => {
+  const { server, port } = await startGateway();
+  server.close();
+  const profiles = `    profiles:
+      profile-a: { members: [primary], description: Main work }
+`;
+  await withConfiguration(port, profiles, async (_directory, register) => {
+    const { providers, tools: [tool] } = await register();
+    assert.deepEqual(providers, []);
+    assert.equal(tool.name, 'cpa_profile_map');
+    assert.equal(tool.approval, 'read');
+    const result = await (tool.execute as () => Promise<{ content: { text: string }[]; details: { connections?: { id: string }[]; error?: string } }>)();
+    assert.equal(result.details.error, undefined);
+    assert.deepEqual(result.details.connections?.map(({ id }) => id), ['test-proxy']);
+    assert.match(result.content[0].text, /`test-proxy\/profile-a`[\s\S]*\| profile-a \| primary \| nessuno \| 200\.000 \|.*\| Main work \|/);
+  });
 });

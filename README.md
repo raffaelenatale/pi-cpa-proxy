@@ -278,6 +278,10 @@ omp plugin upgrade            # after a new release (or: omp update --plugins)
 
 Remove a previously generated `models.yml` (or its `cpa-vps` provider) first: both would define the same provider.
 
+### Profile map in omp
+
+`cpa_profile_map` is registered as an omp tool with the same definition as in Pi (`profile-map-registration.ts`), with `approval: read`. It reads only the local configuration on every call (no server request), so it works even when the gateway is down. The model reaches it through `xd://cpa_profile_map`. The `/profile-map` and `/<suffix>` slash commands stay Pi-only.
+
 ### Web search in omp
 
 omp has its own `web_search` tool and no pi-web-access, so the two integrations map as follows:
